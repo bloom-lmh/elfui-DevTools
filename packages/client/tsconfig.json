@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "composite": true,
+    "paths": { "@elfui/devtools-runtime": ["../runtime/src/index.ts"] }
+  },
+  "references": [{ "path": "../runtime" }],
+  "include": ["src/**/*.ts"]
+}

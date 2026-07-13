@@ -198,6 +198,10 @@ export class ElfUIDevtoolsBridge {
     };
   }
 
+  public getComponentId(host: HTMLElement): string | null {
+    return this.componentIds.get(host) ?? null;
+  }
+
   public getTimeline(): readonly TimelineEvent[] {
     return this.timeline;
   }
