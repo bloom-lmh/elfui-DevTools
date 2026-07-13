@@ -266,3 +266,18 @@ export class ElfUIDevtoolsBridge {
 export const createDevtoolsBridge = (
   options?: DevtoolsBridgeOptions,
 ): ElfUIDevtoolsBridge => new ElfUIDevtoolsBridge(options);
+
+export const DEVTOOLS_GLOBAL_HOOK = "__ELFUI_DEVTOOLS_GLOBAL_HOOK__";
+
+export const installGlobalDevtoolsBridge = (
+  bridge: ElfUIDevtoolsBridge,
+  target: Record<string, unknown> = globalThis,
+): (() => void) => {
+  const previous = target[DEVTOOLS_GLOBAL_HOOK];
+  target[DEVTOOLS_GLOBAL_HOOK] = bridge;
+  return () => {
+    if (target[DEVTOOLS_GLOBAL_HOOK] !== bridge) return;
+    if (previous === undefined) delete target[DEVTOOLS_GLOBAL_HOOK];
+    else target[DEVTOOLS_GLOBAL_HOOK] = previous;
+  };
+};

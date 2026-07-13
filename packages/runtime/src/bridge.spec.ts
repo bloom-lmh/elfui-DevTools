@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createDevtoolsBridge } from "./bridge";
+import {
+  createDevtoolsBridge,
+  DEVTOOLS_GLOBAL_HOOK,
+  installGlobalDevtoolsBridge,
+} from "./bridge";
 
 describe("ElfUIDevtoolsBridge", () => {
   it("builds a component tree across an open shadow root", () => {
@@ -62,5 +66,16 @@ describe("ElfUIDevtoolsBridge", () => {
       bridge.registerComponent({ host, tag: "different-tag" }),
     );
     expect(bridge.getSnapshot().components).toHaveLength(1);
+  });
+
+  it("installs and restores the global bridge hook", () => {
+    const target: Record<string, unknown> = {
+      [DEVTOOLS_GLOBAL_HOOK]: "previous",
+    };
+    const bridge = createDevtoolsBridge();
+    const dispose = installGlobalDevtoolsBridge(bridge, target);
+    expect(target[DEVTOOLS_GLOBAL_HOOK]).toBe(bridge);
+    dispose();
+    expect(target[DEVTOOLS_GLOBAL_HOOK]).toBe("previous");
   });
 });
