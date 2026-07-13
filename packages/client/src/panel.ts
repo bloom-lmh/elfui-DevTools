@@ -87,7 +87,10 @@ export class DevtoolsPanel {
     this.root.append(timeline);
     if (!detail) return;
     const detailNode = document.createElement("pre");
-    detailNode.textContent = `${detail.displayName}\nprops: ${valueText(detail.props)}\nattrs: ${valueText(detail.attrs)}\nsetup: ${valueText(detail.setup)}\nupdates: ${detail.lifecycle.updateCount}`;
+    const source = detail.source
+      ? `${detail.source.file}:${detail.source.line}:${detail.source.column}`
+      : "unavailable";
+    detailNode.textContent = `${detail.displayName}\nsource: ${source}\nprops: ${valueText(detail.props)}\nattrs: ${valueText(detail.attrs)}\nsetup: ${valueText(detail.setup)}\nupdates: ${detail.lifecycle.updateCount}`;
     this.root.append(detailNode);
   }
 }

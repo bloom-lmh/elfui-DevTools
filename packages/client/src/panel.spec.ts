@@ -11,6 +11,7 @@ describe("DevtoolsPanel", () => {
       host,
       tag: "elf-counter",
       props: () => ({ count: 2 }),
+      source: { file: "/src/Counter.elf", line: 2, column: 3 },
     });
     const panel = new DevtoolsPanel(bridge);
     const componentButton = Array.from(
@@ -23,6 +24,9 @@ describe("DevtoolsPanel", () => {
     expect(
       document.querySelector("[data-elfui-devtools=panel]")?.textContent,
     ).toContain("elf-counter");
+    expect(
+      document.querySelector("[data-elfui-devtools=panel]")?.textContent,
+    ).toContain("/src/Counter.elf:2:3");
     bridge.notifyUpdate(host);
     expect(
       document.querySelector("[data-elfui-devtools=timeline]")?.textContent,
