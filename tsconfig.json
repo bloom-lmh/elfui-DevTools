@@ -4,6 +4,7 @@
   "references": [
     { "path": "./packages/shared" },
     { "path": "./packages/runtime" },
-    { "path": "./packages/client" }
+    { "path": "./packages/client" },
+    { "path": "./packages/vite" }
   ]
 }

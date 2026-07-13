@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "composite": true,
+    "paths": { "@elfui/devtools-client": ["../client/src/index.ts"] }
+  },
+  "references": [{ "path": "../client" }],
+  "include": ["src/**/*.ts"]
+}

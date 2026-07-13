@@ -1,0 +1,14 @@
+{
+  "name": "@elfui/devtools-vite",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "dependencies": {
+    "@elfui/devtools-client": "workspace:*"
+  },
+  "peerDependencies": {
+    "vite": "^7.0.0"
+  },
+  "license": "MIT"
+}

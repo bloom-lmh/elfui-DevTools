@@ -117,3 +117,4 @@ export class ComponentInspector {
 }
 
 export { DevtoolsPanel } from "./panel";
+export { installElfUIDevtools } from "./bootstrap";
