@@ -115,3 +115,5 @@ export class ComponentInspector {
     if (event.key === "Escape") this.disable();
   };
 }
+
+export { DevtoolsPanel } from "./panel";

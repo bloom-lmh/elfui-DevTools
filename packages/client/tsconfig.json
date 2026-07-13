@@ -4,8 +4,11 @@
     "rootDir": "./src",
     "outDir": "./dist",
     "composite": true,
-    "paths": { "@elfui/devtools-runtime": ["../runtime/src/index.ts"] }
+    "paths": {
+      "@elfui/devtools-shared": ["../shared/src/index.ts"],
+      "@elfui/devtools-runtime": ["../runtime/src/index.ts"]
+    }
   },
-  "references": [{ "path": "../runtime" }],
+  "references": [{ "path": "../shared" }, { "path": "../runtime" }],
   "include": ["src/**/*.ts"]
 }
