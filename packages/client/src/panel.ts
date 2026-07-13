@@ -77,6 +77,14 @@ export class DevtoolsPanel {
       list.append(button);
     }
     this.root.append(list);
+    const timeline = document.createElement("ol");
+    timeline.dataset.elfuiDevtools = "timeline";
+    for (const event of this.bridge.getTimeline().slice(-20).reverse()) {
+      const item = document.createElement("li");
+      item.textContent = `${event.layer}:${event.type} — ${event.summary}`;
+      timeline.append(item);
+    }
+    this.root.append(timeline);
     if (!detail) return;
     const detailNode = document.createElement("pre");
     detailNode.textContent = `${detail.displayName}\nprops: ${valueText(detail.props)}\nattrs: ${valueText(detail.attrs)}\nsetup: ${valueText(detail.setup)}\nupdates: ${detail.lifecycle.updateCount}`;

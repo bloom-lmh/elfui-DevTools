@@ -23,6 +23,10 @@ describe("DevtoolsPanel", () => {
     expect(
       document.querySelector("[data-elfui-devtools=panel]")?.textContent,
     ).toContain("elf-counter");
+    bridge.notifyUpdate(host);
+    expect(
+      document.querySelector("[data-elfui-devtools=timeline]")?.textContent,
+    ).toContain("component:update");
     panel.dispose();
   });
 });
