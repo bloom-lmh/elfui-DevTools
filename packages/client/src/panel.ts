@@ -9,7 +9,9 @@ const valueText = (value: SerializedValue): string => {
     return `{ ${value.entries.map(({ key, value: item }) => `${key}: ${valueText(item)}`).join(", ")} }`;
   if (value.kind === "array")
     return `[${value.items.map(valueText).join(", ")}]`;
-  return value.preview ?? `[${value.kind}]`;
+  if (value.kind === "map" || value.kind === "set")
+    return `[${value.kind}(${value.entries.length})]`;
+  return "preview" in value ? value.preview : `[${value.kind}]`;
 };
 
 export class DevtoolsPanel {
