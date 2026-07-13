@@ -6,7 +6,11 @@ describe("elfuiDevtools", () => {
     const plugin = elfuiDevtools();
     expect(plugin.apply).toBe("serve");
     expect(createDevtoolsBootstrap()).toMatchObject([
-      { tag: "script", injectTo: "body" },
+      {
+        tag: "script",
+        attrs: { src: "/@id/@elfui/devtools-client/auto" },
+        injectTo: "body",
+      },
     ]);
     expect(elfuiDevtools({ enabled: false }).transformIndexHtml).toBeDefined();
   });

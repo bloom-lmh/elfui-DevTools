@@ -7,9 +7,7 @@ export interface ElfUIDevtoolsViteOptions {
 export const createDevtoolsBootstrap = () => [
   {
     tag: "script",
-    attrs: { type: "module" },
-    children:
-      'import { installElfUIDevtools } from "@elfui/devtools-client"; installElfUIDevtools();',
+    attrs: { type: "module", src: "/@id/@elfui/devtools-client/auto" },
     injectTo: "body" as const,
   },
 ];
