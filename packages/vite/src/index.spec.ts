@@ -8,7 +8,9 @@ describe("elfuiDevtools", () => {
     expect(createDevtoolsBootstrap()).toMatchObject([
       {
         tag: "script",
-        attrs: { src: "/@id/@elfui/devtools-client/auto" },
+        attrs: {
+          src: "/@id/__x00__virtual:elfui-devtools-client",
+        },
         injectTo: "body",
       },
     ]);
