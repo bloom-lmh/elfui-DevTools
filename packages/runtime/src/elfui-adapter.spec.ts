@@ -16,6 +16,11 @@ describe("installElfUIAdapter", () => {
         shadow: "open" as const,
       };
       public count = 3;
+      public static __elfSource = {
+        file: "/src/Counter.elf",
+        line: 4,
+        column: 1,
+      };
     }
     customElements.define("elf-adapter-counter", Counter);
     const host = document.createElement("elf-adapter-counter") as Counter;
@@ -25,7 +30,7 @@ describe("installElfUIAdapter", () => {
     const adapter = installElfUIAdapter(bridge);
 
     expect(bridge.getSnapshot().components).toMatchObject([
-      { tag: "elf-adapter-counter" },
+      { tag: "elf-adapter-counter", source: { file: "/src/Counter.elf" } },
     ]);
     expect(bridge.getSnapshot().components).toHaveLength(1);
     host.remove();

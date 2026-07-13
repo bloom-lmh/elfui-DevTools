@@ -1,5 +1,6 @@
 import type { DevtoolsComponentInput } from "./bridge";
 import type { ElfUIDevtoolsBridge } from "./bridge";
+import type { SourceLocation } from "@elfui/devtools-shared";
 
 const INSTANCE_KEY = Symbol.for("elfui.instance");
 
@@ -11,6 +12,7 @@ interface ElfUIDefinition {
 
 interface ElfUIConstructor extends CustomElementConstructor {
   __elfDefinition?: ElfUIDefinition;
+  __elfSource?: SourceLocation;
 }
 
 const isElfUIHost = (node: Node): node is HTMLElement => {
@@ -32,6 +34,7 @@ const attributes = (host: HTMLElement): Record<string, string> =>
 
 const inputFor = (host: HTMLElement): DevtoolsComponentInput => {
   const definition = (host.constructor as ElfUIConstructor).__elfDefinition!;
+  const source = (host.constructor as ElfUIConstructor).__elfSource;
   const propNames = Object.keys(definition.props ?? {});
   return {
     host,
@@ -39,6 +42,7 @@ const inputFor = (host: HTMLElement): DevtoolsComponentInput => {
     ...(definition.tag ? { displayName: definition.tag } : {}),
     shadowMode:
       definition.shadow === false ? "none" : (definition.shadow ?? "open"),
+    ...(source ? { source } : {}),
     props: () =>
       Object.fromEntries(
         propNames.map((name) => [name, host[name as keyof HTMLElement]]),
