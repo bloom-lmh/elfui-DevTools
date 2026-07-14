@@ -78,4 +78,43 @@ describe("ElfUIDevtoolsBridge", () => {
     dispose();
     expect(target[DEVTOOLS_GLOBAL_HOOK]).toBe("previous");
   });
+
+  it("consumes real ElfUI runtime app, component, update, and emit events", () => {
+    const bridge = createDevtoolsBridge({ now: () => 25 });
+    const host = document.createElement("elf-runtime-counter");
+    bridge.emitRuntimeEvent({
+      type: "app:mount",
+      app: { id: "elfui-app:1", label: "elf-app", root: host },
+    });
+    bridge.emitRuntimeEvent({
+      type: "component:mount",
+      component: {
+        host,
+        appId: "elfui-app:1",
+        tag: "elf-runtime-counter",
+        props: () => ({ count: 2 }),
+        setup: () => ({ ready: true }),
+      },
+    });
+    bridge.emitRuntimeEvent({ type: "component:update", host });
+    bridge.emitRuntimeEvent({
+      type: "component:emit",
+      host,
+      event: "change",
+      args: [3],
+    });
+
+    expect(bridge.getSnapshot().apps).toMatchObject([
+      { id: "elfui-app:1", rootIds: ["component:1"] },
+    ]);
+    expect(bridge.getComponentDetail("component:1")?.setup).toMatchObject({
+      kind: "object",
+      entries: [{ key: "ready", value: { value: true } }],
+    });
+    expect(bridge.getTimeline().map((event) => event.layer)).toEqual([
+      "component",
+      "component",
+      "events",
+    ]);
+  });
 });

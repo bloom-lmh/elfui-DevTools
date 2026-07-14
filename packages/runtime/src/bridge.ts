@@ -12,6 +12,8 @@ import {
 
 export interface DevtoolsComponentInput {
   host: HTMLElement;
+  appId?: string | null;
+  parentHost?: HTMLElement | null;
   tag: string;
   displayName?: string;
   shadowMode?: "open" | "closed" | "none";
@@ -21,6 +23,23 @@ export interface DevtoolsComponentInput {
   setup?: () => Record<string, unknown>;
   exposed?: () => Record<string, unknown>;
 }
+
+export type ElfUIRuntimeEvent =
+  | {
+      type: "app:mount";
+      app: { id: string; label: string; root: HTMLElement };
+    }
+  | { type: "app:unmount"; appId: string }
+  | { type: "component:mount"; component: DevtoolsComponentInput }
+  | { type: "component:update"; host: HTMLElement }
+  | { type: "component:unmount"; host: HTMLElement }
+  | { type: "component:error"; host: HTMLElement; error: unknown }
+  | {
+      type: "component:emit";
+      host: HTMLElement;
+      event: string;
+      args: unknown[];
+    };
 
 export interface DevtoolsBridgeOptions {
   now?: () => number;
@@ -89,10 +108,13 @@ export class ElfUIDevtoolsBridge {
     const existingId = this.componentIds.get(input.host);
     if (existingId) return existingId;
 
-    const parentId = this.findParentId(input.host);
+    const parentId = this.findParentId(input.host, input.parentHost);
     const parent = parentId ? this.components.get(parentId) : undefined;
     const appId =
-      parent?.appId ?? this.createApp(input.displayName ?? input.tag);
+      parent?.appId ??
+      input.appId ??
+      this.createApp(input.displayName ?? input.tag);
+    this.ensureApp(appId, input.displayName ?? input.tag);
     const id = `component:${this.nextComponentId++}`;
     const record: ComponentRecord = {
       id,
@@ -171,6 +193,54 @@ export class ElfUIDevtoolsBridge {
     });
   }
 
+  public registerApp(id: string, label: string): void {
+    this.ensureApp(id, label);
+  }
+
+  public unregisterApp(id: string): void {
+    for (const component of Array.from(this.components.values())) {
+      if (component.appId === id)
+        this.unregisterComponent(component.input.host);
+    }
+    this.apps.delete(id);
+  }
+
+  public emitRuntimeEvent(event: ElfUIRuntimeEvent): void {
+    switch (event.type) {
+      case "app:mount":
+        this.registerApp(event.app.id, event.app.label);
+        break;
+      case "app:unmount":
+        this.unregisterApp(event.appId);
+        break;
+      case "component:mount":
+        this.registerComponent(event.component);
+        break;
+      case "component:update":
+        this.notifyUpdate(event.host);
+        break;
+      case "component:unmount":
+        this.unregisterComponent(event.host);
+        break;
+      case "component:error":
+        this.notifyError(event.host, event.error);
+        break;
+      case "component:emit": {
+        const component = this.findComponent(event.host);
+        if (!component) break;
+        this.emit({
+          appId: component.appId,
+          componentId: component.id,
+          layer: "events",
+          type: event.event,
+          summary: `${component.input.tag} emitted ${event.event}`,
+          data: serialize(event.args),
+        });
+        break;
+      }
+    }
+  }
+
   public getSnapshot(): DevtoolsSnapshot {
     return {
       protocolVersion: DEVTOOLS_PROTOCOL_VERSION,
@@ -217,7 +287,22 @@ export class ElfUIDevtoolsBridge {
     return id;
   }
 
-  private findParentId(host: HTMLElement): string | null {
+  private ensureApp(id: string, label: string): AppRecord {
+    const existing = this.apps.get(id);
+    if (existing) return existing;
+    const app = { id, label, rootIds: new Set<string>() };
+    this.apps.set(id, app);
+    return app;
+  }
+
+  private findParentId(
+    host: HTMLElement,
+    explicitParent?: HTMLElement | null,
+  ): string | null {
+    if (explicitParent) {
+      const explicitId = this.componentIds.get(explicitParent);
+      if (explicitId) return explicitId;
+    }
     let parent = elementParent(host);
     while (parent) {
       const id = this.componentIds.get(parent);

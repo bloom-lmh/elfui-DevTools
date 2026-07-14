@@ -14,22 +14,30 @@ describe("DevtoolsPanel", () => {
       source: { file: "/src/Counter.elf", line: 2, column: 3 },
     });
     const panel = new DevtoolsPanel(bridge);
+    const panelHost = document.querySelector<HTMLElement>(
+      "[data-elfui-devtools=host]",
+    );
+    const shadow = panelHost?.shadowRoot;
+    const panelNode = shadow?.querySelector<HTMLElement>(
+      "[data-elfui-devtools=panel]",
+    );
+    expect(panel.opened).toBe(false);
+    expect(panelNode?.hidden).toBe(true);
+    shadow
+      ?.querySelector<HTMLButtonElement>('[aria-label="Toggle ElfUI DevTools"]')
+      ?.click();
+    expect(panel.opened).toBe(true);
+    expect(panelNode?.hidden).toBe(false);
     const componentButton = Array.from(
-      document.querySelectorAll("button"),
+      shadow?.querySelectorAll("button") ?? [],
     ).find((button) => button.textContent === "<elf-counter>");
     componentButton?.click();
-    expect(
-      document.querySelector("[data-elfui-devtools=panel]")?.textContent,
-    ).toContain("count: 2");
-    expect(
-      document.querySelector("[data-elfui-devtools=panel]")?.textContent,
-    ).toContain("elf-counter");
-    expect(
-      document.querySelector("[data-elfui-devtools=panel]")?.textContent,
-    ).toContain("/src/Counter.elf:2:3");
+    expect(panelNode?.textContent).toContain("count: 2");
+    expect(panelNode?.textContent).toContain("elf-counter");
+    expect(panelNode?.textContent).toContain("/src/Counter.elf:2:3");
     bridge.notifyUpdate(host);
     expect(
-      document.querySelector("[data-elfui-devtools=timeline]")?.textContent,
+      shadow?.querySelector("[data-elfui-devtools=timeline]")?.textContent,
     ).toContain("component:update");
     panel.dispose();
   });

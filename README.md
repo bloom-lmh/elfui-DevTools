@@ -16,7 +16,7 @@ export default defineConfig({
 });
 ```
 
-In development, it injects a floating ElfUI DevTools panel. Choose **Inspect component**, then click an `elf-*` host to inspect the component tree, props, attributes, setup snapshot, lifecycle count, and recent timeline events. The plugin uses `apply: "serve"`, so it is absent from production builds.
+In development, it injects a bottom-center launcher with separate **ElfUI DevTools** and **Component Inspector** buttons. The panel stays hidden until opened; choose the inspector, then click an `elf-*` host to inspect the component tree, props, attributes, setup snapshot, exposed state, lifecycle count, and recent timeline events. The plugin uses `apply: "serve"`, so it is absent from production builds.
 
 For source locations, the compiler may attach a development-only `__elfSource` field to a component constructor:
 

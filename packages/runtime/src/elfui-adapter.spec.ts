@@ -24,7 +24,13 @@ describe("installElfUIAdapter", () => {
     }
     customElements.define("elf-adapter-counter", Counter);
     const host = document.createElement("elf-adapter-counter") as Counter;
-    (host as unknown as Record<symbol, unknown>)[INSTANCE_KEY] = {};
+    (host as unknown as Record<symbol, unknown>)[INSTANCE_KEY] = {
+      devtools: {
+        props: { count: 4 },
+        setup: { ready: true },
+        exposed: { focus: "method" },
+      },
+    };
     document.body.appendChild(host);
     const bridge = createDevtoolsBridge();
     const adapter = installElfUIAdapter(bridge);
@@ -33,6 +39,10 @@ describe("installElfUIAdapter", () => {
       { tag: "elf-adapter-counter", source: { file: "/src/Counter.elf" } },
     ]);
     expect(bridge.getSnapshot().components).toHaveLength(1);
+    const id = bridge.getSnapshot().components[0]!.id;
+    expect(bridge.getComponentDetail(id)?.setup).toMatchObject({
+      entries: [{ key: "ready", value: { value: true } }],
+    });
     host.remove();
     await Promise.resolve();
     await Promise.resolve();

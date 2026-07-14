@@ -3,6 +3,7 @@ import type { ElfUIDevtoolsBridge } from "./bridge";
 import type { SourceLocation } from "@elfui/devtools-shared";
 
 const INSTANCE_KEY = Symbol.for("elfui.instance");
+const APP_ID_KEY = Symbol.for("elfui.app.id");
 
 interface ElfUIDefinition {
   tag?: string;
@@ -14,6 +15,31 @@ interface ElfUIConstructor extends CustomElementConstructor {
   __elfDefinition?: ElfUIDefinition;
   __elfSource?: SourceLocation;
 }
+
+interface ElfUIInstanceDebugState {
+  devtools?: {
+    props?: Record<string, unknown>;
+    setup?: Record<string, unknown>;
+    exposed?: Record<string, unknown>;
+  };
+}
+
+const instanceFor = (host: HTMLElement): ElfUIInstanceDebugState | null =>
+  ((host as unknown as Record<symbol, unknown>)[INSTANCE_KEY] as
+    | ElfUIInstanceDebugState
+    | undefined) ?? null;
+
+const appIdFor = (host: HTMLElement): string | null => {
+  let current: Node | null = host;
+  while (current) {
+    const appId = (current as unknown as Record<symbol, unknown>)[APP_ID_KEY];
+    if (typeof appId === "string") return appId;
+    if (current.parentNode) current = current.parentNode;
+    else if (current instanceof ShadowRoot) current = current.host;
+    else current = null;
+  }
+  return null;
+};
 
 const isElfUIHost = (node: Node): node is HTMLElement => {
   if (!(node instanceof HTMLElement)) return false;
@@ -36,18 +62,23 @@ const inputFor = (host: HTMLElement): DevtoolsComponentInput => {
   const definition = (host.constructor as ElfUIConstructor).__elfDefinition!;
   const source = (host.constructor as ElfUIConstructor).__elfSource;
   const propNames = Object.keys(definition.props ?? {});
+  const debug = instanceFor(host)?.devtools;
   return {
     host,
+    appId: appIdFor(host),
     tag: definition.tag!,
     ...(definition.tag ? { displayName: definition.tag } : {}),
     shadowMode:
       definition.shadow === false ? "none" : (definition.shadow ?? "open"),
     ...(source ? { source } : {}),
     props: () =>
+      debug?.props ??
       Object.fromEntries(
         propNames.map((name) => [name, host[name as keyof HTMLElement]]),
       ),
     attrs: () => attributes(host),
+    setup: () => debug?.setup ?? {},
+    exposed: () => debug?.exposed ?? {},
   };
 };
 

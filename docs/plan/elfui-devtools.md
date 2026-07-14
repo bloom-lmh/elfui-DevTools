@@ -6,6 +6,22 @@
 >
 > 当前 ElfUI DevTools：0.0.x 技术原型
 
+## 本轮推进状态（2026-07-15）
+
+本轮完成了 Phase 0–1 的第一条纵向链路，但两个阶段均未完成，不能按里程碑发布：
+
+- [x] `createApp()` 分配稳定 app ID，并发出 app mount/unmount 开发态事件。
+- [x] ElfUI runtime 发出 component mount/update/unmount/error/emit 事件；update 按微任务合并。
+- [x] runtime debug record 已接入 props、attrs、setup state、exposed、source metadata。
+- [x] DevTools bridge 优先消费 runtime 事件；保留 DOM 扫描作为晚加载兼容路径。
+- [x] 页面底部居中双按钮、默认隐藏面板、Inspector 选中后自动打开面板。
+- [x] DevTools UI 使用 Shadow DOM 隔离；补充 bridge、adapter、panel 和 runtime 集成测试。
+- [x] `elfui-docs` 本地开发配置完成 Vite 插件接入，并通过真实浏览器验证双入口和面板开关。
+- [ ] Phase 0 剩余：逻辑父子记录、Teleport/KeepAlive fixture、WeakRef/GC、reactivity 链路、版本化 RPC 与能力协商。
+- [ ] Phase 1 剩余：停靠/缩放/全屏、导航与 app selector、主题和布局持久化、完整键盘/ARIA、视觉 E2E。
+
+下一步严格按顺序推进：先完成逻辑组件树与可回收 debug record，再做响应式因果链和 RPC，之后完善面板外壳；在这些验收完成前不进入 Assets、Graph、浏览器扩展或 standalone。
+
 ## 1. 目标与边界
 
 目标不是复制 Vue DevTools 的界面，而是让 ElfUI 开发者获得同等级的核心调试体验：理解应用、检查组件、编辑状态、定位源码、分析更新、调试路由与生态插件，并能在页面内、浏览器扩展和独立窗口中使用同一套能力。
@@ -53,53 +69,53 @@ Vue DevTools 的仓库也按 client、core、devtools-kit、devtools-api、overl
 
 ### 3.1 已实现
 
-| 能力            | 当前实现                                                     | 证据/限制                                                     |
-| --------------- | ------------------------------------------------------------ | ------------------------------------------------------------- |
-| 基础协议        | `protocolVersion = 1`，定义 app、component、timeline 快照    | 只有页面内同步调用，没有请求/响应、握手和跨宿主 transport     |
-| 安全序列化      | 支持循环引用、深度/条目限制及特殊类型摘要                    | 缺少惰性展开、大对象分页和可编辑路径                          |
-| 组件登记        | bridge 可登记/注销组件并生成 ID                              | 实际 adapter 主要靠 DOM 扫描与 MutationObserver               |
-| 基础组件树      | 可根据宿主 DOM 推断父子关系                                  | 不是 ElfUI 逻辑树；Teleport、KeepAlive、动态组件会不准确      |
-| 基础组件详情    | props、attrs、setup、exposed、生命周期字段已定义             | adapter 目前只真正读取 props 和 attrs；setup/exposed 为空     |
-| 基础 Inspector  | 悬停高亮、点击选中、Escape 退出                              | 没有组件标签、滚动定位、源码跳转、快捷键和双向同步完善        |
-| 基础 Timeline   | bridge 保存有上限的 mount/unmount/update/error 事件          | update/error 需要外部手动调用；没有时长、过滤和响应式链路     |
-| Vite 开发注入   | `apply: "serve"`，通过虚拟模块加载客户端                     | 只有 HTML 注入；缺少 `appendTo`、CSP、SSR/无 HTML 入口策略    |
-| 全局 hook       | 安装 `__ELFUI_DEVTOOLS_GLOBAL_HOOK__`                        | 当前 hook 直接暴露 bridge 实例，不是稳定插件协议              |
-| Source 字段展示 | 可读取构造器上的 `__elfSource` 并显示                        | 编译器未系统生成 metadata，Vite 也没有 open-in-editor 服务    |
-| 最小测试        | serializer、bridge、adapter、Inspector、panel、Vite 注入单测 | 12 个测试；没有真实 ElfUI fixture、浏览器 E2E、性能和扩展测试 |
+| 能力            | 当前实现                                                     | 证据/限制                                                   |
+| --------------- | ------------------------------------------------------------ | ----------------------------------------------------------- |
+| 基础协议        | `protocolVersion = 1`，定义 app、component、timeline 快照    | 只有页面内同步调用，没有请求/响应、握手和跨宿主 transport   |
+| 安全序列化      | 支持循环引用、深度/条目限制及特殊类型摘要                    | 缺少惰性展开、大对象分页和可编辑路径                        |
+| 组件登记        | runtime 主动发送 app/component 生命周期事件                  | 晚加载兼容仍使用 DOM 扫描与 MutationObserver                |
+| 基础组件树      | runtime 传递 app ID 和父 host，client 按层级缩进             | 仍不是完整逻辑树；Teleport、KeepAlive、动态组件需补 fixture |
+| 基础组件详情    | 真实读取 props、attrs、setup、exposed 和 source metadata     | provides/injects、refs、computed 与响应式依赖尚未接入       |
+| 基础 Inspector  | 悬停高亮、点击选中、Escape 退出                              | 没有组件标签、滚动定位、源码跳转、快捷键和双向同步完善      |
+| 基础 Timeline   | 自动采集 mount/unmount/update/error/emit，update 微任务合并  | 没有时长、过滤、性能指标和响应式因果链                      |
+| Vite 开发注入   | `apply: "serve"`，通过虚拟模块加载客户端                     | 只有 HTML 注入；缺少 `appendTo`、CSP、SSR/无 HTML 入口策略  |
+| 全局 hook       | runtime 与 bridge 通过 `__ELFUI_DEVTOOLS_GLOBAL_HOOK__` 连接 | 仍是同页事件接口，未升级为版本化 RPC/插件协议               |
+| Source 字段展示 | 可读取构造器上的 `__elfSource` 并显示                        | 编译器未系统生成 metadata，Vite 也没有 open-in-editor 服务  |
+| 最小测试        | DevTools 13 个测试，并有真实 ElfUI runtime/app 集成测试      | 已手工浏览器验收；仍缺自动浏览器 E2E、性能和扩展测试        |
 
 ### 3.2 部分实现但不可视为完成
 
-- **Components**：只有扁平按钮列表，没有正确缩进、折叠、搜索、多选/负向过滤、组件定位、面包屑和大树虚拟滚动。
-- **应用模型**：bridge 有 `apps` 数组，但每个无父组件的顶层元素都会隐式创建 app；没有接入 `createApp()`，因此多应用识别不可靠。
-- **状态检查**：协议有 setup/exposed 字段，但 runtime adapter 没有读取真实 `ComponentInstance` 的 setup state、expose、provide/inject 或响应式节点。
-- **更新记录**：bridge 有 `notifyUpdate()`，但 ElfUI runtime 没有调用它，页面中的真实响应式更新通常不会进入时间线。
+- **Components**：已有层级缩进和 Inspector 选中联动，但没有折叠、搜索、多选/负向过滤、面包屑和大树虚拟滚动。
+- **应用模型**：已接入 `createApp()` 的稳定 ID 与 mount/unmount；晚加载扫描仍会为未知顶层 host 创建兼容 app，UI 也没有 app selector。
+- **状态检查**：已读取真实 `ComponentInstance` 的 setup state 和 exposed；provide/inject、refs、computed、编辑能力和响应式节点仍未实现。
+- **更新记录**：ElfUI runtime 已主动发送合并后的组件 update 与 emit/error；尚未关联 state write、effect/binding、耗时和源码。
 - **源码定位**：只能显示预先存在的文件行列，不能点击打开编辑器，也没有模板 binding 级位置。
-- **UI**：当前为 320px 的常驻右下角文本面板，不具备 Vue 风格双按钮启动器、可停靠窗口、导航、键盘操作、主题和布局持久化。
+- **UI**：已有 Vue 风格双按钮启动器、默认隐藏的 Shadow DOM 面板和关闭行为；仍缺停靠/缩放、导航、完整键盘操作、主题和布局持久化。
 
 ### 3.3 完全未实现
 
-| Vue 能力                                   | ElfUI 状态       | 优先级 |
-| ------------------------------------------ | ---------------- | ------ |
-| Overview                                   | 未实现           | P1     |
-| Pages                                      | 未实现           | P2     |
-| 完整 Components 体验                       | 大部分未实现     | P0     |
-| 状态实时编辑                               | 未实现           | P0     |
-| 性能 Timeline                              | 未实现           | P0     |
-| Events/Reactivity Timeline                 | 未实现           | P0     |
-| Assets                                     | 未实现           | P3     |
-| Router                                     | 未实现           | P1     |
-| Pinia 对应的 store inspector / time travel | 未实现           | P2     |
-| Graph                                      | 未实现           | P3     |
-| Settings                                   | 未实现           | P1     |
-| Vite Transform Inspect                     | 未实现           | P3     |
-| Open in editor                             | 未实现           | P0     |
-| Separate Window                            | 未实现           | P2     |
-| Command Palette                            | 未实现           | P2     |
-| Multiple Apps                              | 协议占位，不可用 | P1     |
-| Split Screen                               | 未实现           | P3     |
-| Plugin API                                 | 未实现           | P1     |
-| Chrome/Firefox extension                   | 未实现           | P3     |
-| Standalone / remote transport              | 未实现           | P3     |
+| Vue 能力                                   | ElfUI 状态                 | 优先级 |
+| ------------------------------------------ | -------------------------- | ------ |
+| Overview                                   | 未实现                     | P1     |
+| Pages                                      | 未实现                     | P2     |
+| 完整 Components 体验                       | 大部分未实现               | P0     |
+| 状态实时编辑                               | 未实现                     | P0     |
+| 性能 Timeline                              | 未实现                     | P0     |
+| Events/Reactivity Timeline                 | 未实现                     | P0     |
+| Assets                                     | 未实现                     | P3     |
+| Router                                     | 未实现                     | P1     |
+| Pinia 对应的 store inspector / time travel | 未实现                     | P2     |
+| Graph                                      | 未实现                     | P3     |
+| Settings                                   | 未实现                     | P1     |
+| Vite Transform Inspect                     | 未实现                     | P3     |
+| Open in editor                             | 未实现                     | P0     |
+| Separate Window                            | 未实现                     | P2     |
+| Command Palette                            | 未实现                     | P2     |
+| Multiple Apps                              | runtime 已识别，缺 UI 切换 | P1     |
+| Split Screen                               | 未实现                     | P3     |
+| Plugin API                                 | 未实现                     | P1     |
+| Chrome/Firefox extension                   | 未实现                     | P3     |
+| Standalone / remote transport              | 未实现                     | P3     |
 
 ## 4. 目标架构
 
