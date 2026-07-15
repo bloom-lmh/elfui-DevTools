@@ -220,6 +220,7 @@ describe("ElfUIDevtoolsBridge", () => {
       parentId: null,
       host,
       tag: "elf-reactivity-counter",
+      source: { file: "/src/Counter.elf", line: 1, column: 1 },
     });
 
     bridge.emitReactivityEvent({
@@ -233,6 +234,11 @@ describe("ElfUIDevtoolsBridge", () => {
         {
           effectId: "elfui-effect:1",
           componentId: "elfui-component:counter",
+          debug: {
+            kind: "binding",
+            name: "text",
+            source: { line: 4, column: 8 },
+          },
         },
       ],
     });
@@ -241,6 +247,11 @@ describe("ElfUIDevtoolsBridge", () => {
       triggerId: "elfui-trigger:1",
       effectId: "elfui-effect:1",
       componentId: "elfui-component:counter",
+      debug: {
+        kind: "binding",
+        name: "text",
+        source: { line: 4, column: 8 },
+      },
       duration: 1.25,
     });
 
@@ -248,13 +259,71 @@ describe("ElfUIDevtoolsBridge", () => {
       {
         layer: "reactivity",
         type: "trigger",
-        summary: "count.value triggered 1 effect",
+        summary: "count.value → text triggered 1 effect @ /src/Counter.elf:4:8",
       },
       {
         layer: "reactivity",
         type: "effect",
-        summary: "elfui-effect:1 ran in 1.25ms",
+        summary: "text ran in 1.25ms @ /src/Counter.elf:4:8",
       },
     ]);
+  });
+
+  it("pauses, rate limits, clears, and aggregates timeline events", () => {
+    let now = 100;
+    const bridge = createDevtoolsBridge({
+      now: () => now,
+      maxTimelineEventsPerWindow: 2,
+      timelineWindowMs: 1000,
+      aggregateWindowMs: 16,
+    });
+    const host = document.createElement("elf-busy-counter");
+    bridge.registerComponent({
+      id: "elfui-component:busy",
+      appId: "elfui-app:busy",
+      parentId: null,
+      host,
+      tag: "elf-busy-counter",
+    });
+    bridge.clearTimeline();
+
+    bridge.setTimelinePaused(true);
+    bridge.notifyUpdate(host);
+    expect(bridge.getTimelineStatus()).toMatchObject({
+      paused: true,
+      droppedEvents: 1,
+    });
+
+    bridge.setTimelinePaused(false);
+    bridge.clearTimeline();
+    bridge.notifyUpdate(host);
+    bridge.notifyUpdate(host);
+    bridge.notifyUpdate(host);
+    expect(bridge.getTimeline()).toHaveLength(2);
+    expect(bridge.getTimelineStatus().droppedEvents).toBe(1);
+
+    now += 1000;
+    bridge.clearTimeline();
+    const trigger = {
+      type: "reactivity:trigger" as const,
+      id: "elfui-trigger:busy",
+      parentTriggerId: null,
+      targetId: "elfui-target:busy",
+      targetName: "count",
+      key: "value",
+      effects: [
+        {
+          effectId: "elfui-effect:busy",
+          componentId: "elfui-component:busy",
+          debug: { kind: "binding", name: "text" },
+        },
+      ],
+    };
+    bridge.emitReactivityEvent(trigger);
+    now += 1;
+    bridge.emitReactivityEvent({ ...trigger, id: "elfui-trigger:busy-2" });
+    expect(bridge.getTimeline()).toHaveLength(1);
+    expect(bridge.getTimeline()[0]?.summary).toContain("×2");
+    expect(bridge.getTimelineStatus().aggregatedEvents).toBe(1);
   });
 });

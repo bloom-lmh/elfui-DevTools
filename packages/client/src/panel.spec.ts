@@ -39,6 +39,23 @@ describe("DevtoolsPanel", () => {
     expect(
       shadow?.querySelector("[data-elfui-devtools=timeline]")?.textContent,
     ).toContain("component:update");
+    shadow
+      ?.querySelector<HTMLButtonElement>('[aria-label="Pause timeline"]')
+      ?.click();
+    bridge.notifyUpdate(host);
+    expect(bridge.getTimelineStatus()).toMatchObject({
+      paused: true,
+      droppedEvents: 1,
+    });
+    expect(
+      shadow?.querySelector<HTMLButtonElement>(
+        '[aria-label="Resume timeline"]',
+      ),
+    ).not.toBeNull();
+    shadow
+      ?.querySelector<HTMLButtonElement>('[aria-label="Clear timeline"]')
+      ?.click();
+    expect(bridge.getTimeline()).toHaveLength(0);
     panel.dispose();
   });
 });

@@ -51,19 +51,39 @@ export type ElfUIReactivityEvent =
       targetId: string;
       targetName?: string;
       key: string;
-      effects: Array<{ effectId: string; componentId: string | null }>;
+      effects: Array<{
+        effectId: string;
+        componentId: string | null;
+        debug?: EffectDebugInfo;
+      }>;
     }
   | {
       type: "reactivity:effect";
       triggerId: string;
       effectId: string;
       componentId: string | null;
+      debug?: EffectDebugInfo;
       duration: number;
     };
+
+interface EffectDebugInfo {
+  kind: string;
+  name?: string;
+  source?: { line: number; column: number };
+}
 
 export interface DevtoolsBridgeOptions {
   now?: () => number;
   maxTimelineEvents?: number;
+  maxTimelineEventsPerWindow?: number;
+  timelineWindowMs?: number;
+  aggregateWindowMs?: number;
+}
+
+export interface TimelineStatus {
+  paused: boolean;
+  droppedEvents: number;
+  aggregatedEvents: number;
 }
 
 export type DevtoolsListener = (event: TimelineEvent) => void;
@@ -116,6 +136,16 @@ export class ElfUIDevtoolsBridge {
   private readonly timeline: TimelineEvent[] = [];
   private readonly now: () => number;
   private readonly maxTimelineEvents: number;
+  private readonly maxTimelineEventsPerWindow: number;
+  private readonly timelineWindowMs: number;
+  private readonly aggregateWindowMs: number;
+  private timelinePaused = false;
+  private droppedTimelineEvents = 0;
+  private aggregatedTimelineEvents = 0;
+  private timelineWindowStartedAt = 0;
+  private timelineWindowEventCount = 0;
+  private lastAggregationKey: string | null = null;
+  private lastAggregationCount = 1;
   private nextAppId = 1;
   private nextComponentId = 1;
   private nextEventId = 1;
@@ -123,6 +153,9 @@ export class ElfUIDevtoolsBridge {
   public constructor(options: DevtoolsBridgeOptions = {}) {
     this.now = options.now ?? Date.now;
     this.maxTimelineEvents = options.maxTimelineEvents ?? 1000;
+    this.maxTimelineEventsPerWindow = options.maxTimelineEventsPerWindow ?? 500;
+    this.timelineWindowMs = options.timelineWindowMs ?? 1000;
+    this.aggregateWindowMs = options.aggregateWindowMs ?? 16;
   }
 
   public registerComponent(input: DevtoolsComponentInput): string {
@@ -296,10 +329,18 @@ export class ElfUIDevtoolsBridge {
       .find((record) => record !== undefined);
     if (!component) return;
 
+    const firstDebug =
+      event.type === "reactivity:trigger"
+        ? event.effects.find((effect) => effect.debug)?.debug
+        : event.debug;
+    const binding = firstDebug?.name ? ` → ${firstDebug.name}` : "";
+    const location = firstDebug?.source
+      ? ` @ ${component.input.source?.file ? `${component.input.source.file}:` : ""}${firstDebug.source.line}:${firstDebug.source.column}`
+      : "";
     const summary =
       event.type === "reactivity:trigger"
-        ? `${event.targetName ?? event.targetId}.${event.key} triggered ${event.effects.length} effect${event.effects.length === 1 ? "" : "s"}`
-        : `${event.effectId} ran in ${event.duration.toFixed(2)}ms`;
+        ? `${event.targetName ?? event.targetId}.${event.key}${binding} triggered ${event.effects.length} effect${event.effects.length === 1 ? "" : "s"}${location}`
+        : `${firstDebug?.name ?? event.effectId} ran in ${event.duration.toFixed(2)}ms${location}`;
     this.emit({
       appId: component.appId,
       componentId: component.id,
@@ -343,6 +384,32 @@ export class ElfUIDevtoolsBridge {
 
   public getTimeline(): readonly TimelineEvent[] {
     return this.timeline;
+  }
+
+  public isTimelineRecording(): boolean {
+    return !this.timelinePaused;
+  }
+
+  public getTimelineStatus(): TimelineStatus {
+    return {
+      paused: this.timelinePaused,
+      droppedEvents: this.droppedTimelineEvents,
+      aggregatedEvents: this.aggregatedTimelineEvents,
+    };
+  }
+
+  public setTimelinePaused(paused: boolean): void {
+    this.timelinePaused = paused;
+  }
+
+  public clearTimeline(): void {
+    this.timeline.length = 0;
+    this.droppedTimelineEvents = 0;
+    this.aggregatedTimelineEvents = 0;
+    this.timelineWindowEventCount = 0;
+    this.timelineWindowStartedAt = this.now();
+    this.lastAggregationKey = null;
+    this.lastAggregationCount = 1;
   }
 
   public on(listener: DevtoolsListener): () => void {
@@ -405,11 +472,48 @@ export class ElfUIDevtoolsBridge {
   }
 
   private emit(event: Omit<TimelineEvent, "id" | "at">): void {
+    if (this.timelinePaused) {
+      this.droppedTimelineEvents += 1;
+      return;
+    }
+    const at = this.now();
+    if (at - this.timelineWindowStartedAt >= this.timelineWindowMs) {
+      this.timelineWindowStartedAt = at;
+      this.timelineWindowEventCount = 0;
+    }
+    if (this.timelineWindowEventCount >= this.maxTimelineEventsPerWindow) {
+      this.droppedTimelineEvents += 1;
+      return;
+    }
+    this.timelineWindowEventCount += 1;
+
+    const aggregateKey =
+      event.layer === "reactivity"
+        ? `${event.appId}:${event.componentId ?? ""}:${event.type}:${event.summary.replace(/\d+(?:\.\d+)?ms/g, "<duration>")}`
+        : null;
+    const previous = this.timeline.at(-1);
+    if (
+      aggregateKey &&
+      aggregateKey === this.lastAggregationKey &&
+      previous &&
+      at - previous.at <= this.aggregateWindowMs
+    ) {
+      this.lastAggregationCount += 1;
+      this.aggregatedTimelineEvents += 1;
+      previous.at = at;
+      previous.summary = `${event.summary} ×${this.lastAggregationCount}`;
+      if (event.data) previous.data = event.data;
+      for (const listener of this.listeners) listener(previous);
+      return;
+    }
+
     const timelineEvent: TimelineEvent = {
       id: `event:${this.nextEventId++}`,
-      at: this.now(),
+      at,
       ...event,
     };
+    this.lastAggregationKey = aggregateKey;
+    this.lastAggregationCount = 1;
     this.timeline.push(timelineEvent);
     if (this.timeline.length > this.maxTimelineEvents)
       this.timeline.splice(0, this.timeline.length - this.maxTimelineEvents);

@@ -86,7 +86,10 @@ const styles = `
   }
   .content { max-height: calc(min(72vh, 720px) - 42px); overflow: auto; padding: 10px; }
   .section { margin: 0 0 10px; }
+  .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .section-title { margin: 0 0 5px; color: #94a3b8; font-weight: 600; text-transform: uppercase; }
+  .timeline-actions { display: flex; gap: 4px; margin-bottom: 5px; }
+  .timeline-actions button { border: 1px solid #475569; border-radius: 4px; background: #1e293b; color: #cbd5e1; cursor: pointer; }
   .component {
     display: block;
     width: 100%;
@@ -259,9 +262,43 @@ export class DevtoolsPanel {
 
     const timelineSection = this.document.createElement("section");
     timelineSection.className = "section";
+    const timelineHeading = this.document.createElement("div");
+    timelineHeading.className = "section-heading";
     const timelineTitle = this.document.createElement("p");
     timelineTitle.className = "section-title";
-    timelineTitle.textContent = "Recent timeline";
+    const timelineStatus = this.bridge.getTimelineStatus();
+    const statusParts = [
+      timelineStatus.aggregatedEvents
+        ? `${timelineStatus.aggregatedEvents} aggregated`
+        : "",
+      timelineStatus.droppedEvents
+        ? `${timelineStatus.droppedEvents} dropped`
+        : "",
+    ].filter(Boolean);
+    timelineTitle.textContent = `Recent timeline${statusParts.length ? ` (${statusParts.join(", ")})` : ""}`;
+    const timelineActions = this.document.createElement("div");
+    timelineActions.className = "timeline-actions";
+    const pause = this.document.createElement("button");
+    pause.type = "button";
+    pause.textContent = timelineStatus.paused ? "Resume" : "Pause";
+    pause.setAttribute(
+      "aria-label",
+      timelineStatus.paused ? "Resume timeline" : "Pause timeline",
+    );
+    pause.onclick = () => {
+      this.bridge.setTimelinePaused(!timelineStatus.paused);
+      this.render();
+    };
+    const clear = this.document.createElement("button");
+    clear.type = "button";
+    clear.textContent = "Clear";
+    clear.setAttribute("aria-label", "Clear timeline");
+    clear.onclick = () => {
+      this.bridge.clearTimeline();
+      this.render();
+    };
+    timelineActions.append(pause, clear);
+    timelineHeading.append(timelineTitle, timelineActions);
     const timeline = this.document.createElement("ol");
     timeline.dataset.elfuiDevtools = "timeline";
     for (const event of this.bridge.getTimeline().slice(-20).reverse()) {
@@ -269,7 +306,7 @@ export class DevtoolsPanel {
       item.textContent = `${event.layer}:${event.type} — ${event.summary}`;
       timeline.append(item);
     }
-    timelineSection.append(timelineTitle, timeline);
+    timelineSection.append(timelineHeading, timeline);
     this.content.append(timelineSection);
 
     if (!detail) return;

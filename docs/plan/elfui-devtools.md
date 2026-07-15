@@ -17,14 +17,16 @@
 - [x] bridge 支持子组件先于父组件注册、多 app 隔离、递归卸载，并用 WeakRef 保存 host。
 - [x] reactivity 为 trigger/effect 分配稳定因果 ID，关联 state 调试名、key、effect、component ID 与执行耗时。
 - [x] Timeline 已接入 Reactivity layer；不采集状态值，DevTools 未连接时不生成事件 payload。
+- [x] compiler/runtime 已为常用模板绑定生成 binding 名称与行列 metadata，Timeline 可显示 state → binding → component/source 链路。
+- [x] Timeline 已支持暂停/恢复、清空、16ms 同类事件聚合、窗口限流以及 dropped/aggregated 计数。
 - [x] DevTools bridge 优先消费 runtime 事件；保留 DOM 扫描作为晚加载兼容路径。
 - [x] 页面底部居中双按钮、默认隐藏面板、Inspector 选中后自动打开面板。
 - [x] DevTools UI 使用 Shadow DOM 隔离；补充 bridge、adapter、panel 和 runtime 集成测试。
 - [x] `elfui-docs` 本地开发配置完成 Vite 插件接入，并通过真实浏览器验证双入口和面板开关。
-- [ ] Phase 0 剩余：Dynamic/Suspense fixture、浏览器 GC 验证、binding/source 关联、高频背压、版本化 RPC 与能力协商。
+- [ ] Phase 0 剩余：Dynamic/Suspense fixture、浏览器 GC 验证、v-model/控制流及文件级 source mapping、版本化 RPC 与能力协商。
 - [ ] Phase 1 剩余：停靠/缩放/全屏、导航与 app selector、主题和布局持久化、完整键盘/ARIA、视觉 E2E。
 
-下一步严格按顺序推进：先补 binding/source 关联和高频背压，再完成版本化 RPC 与能力协商，之后完善面板外壳；在这些验收完成前不进入 Assets、Graph、浏览器扩展或 standalone。
+下一步严格按顺序推进：先完成版本化 RPC 与能力协商，再补齐 v-model/控制流 source mapping 和 Dynamic/Suspense fixture，之后完善面板外壳；在这些验收完成前不进入 Assets、Graph、浏览器扩展或 standalone。
 
 ## 1. 目标与边界
 
@@ -73,27 +75,27 @@ Vue DevTools 的仓库也按 client、core、devtools-kit、devtools-api、overl
 
 ### 3.1 已实现
 
-| 能力            | 当前实现                                                      | 证据/限制                                                  |
-| --------------- | ------------------------------------------------------------- | ---------------------------------------------------------- |
-| 基础协议        | `protocolVersion = 1`，定义 app、component、timeline 快照     | 只有页面内同步调用，没有请求/响应、握手和跨宿主 transport  |
-| 安全序列化      | 支持循环引用、深度/条目限制及特殊类型摘要                     | 缺少惰性展开、大对象分页和可编辑路径                       |
-| 组件登记        | runtime 主动发送 app/component 生命周期事件                   | 晚加载兼容仍使用 DOM 扫描与 MutationObserver               |
-| 基础组件树      | 稳定组件/父 ID；跨 Shadow DOM、Teleport、KeepAlive 保持逻辑树 | Dynamic、Suspense 与大规模树仍需专项 fixture               |
-| 基础组件详情    | 真实读取 props、attrs、setup、exposed 和 source metadata      | provides/injects、refs、computed 与响应式依赖尚未接入      |
-| 基础 Inspector  | 悬停高亮、点击选中、Escape 退出                               | 没有组件标签、滚动定位、源码跳转、快捷键和双向同步完善     |
-| 基础 Timeline   | 自动采集组件事件及 state trigger → effect/component 与耗时    | 缺 binding/source、过滤、暂停、聚合、背压和完整性能指标    |
-| Vite 开发注入   | `apply: "serve"`，通过虚拟模块加载客户端                      | 只有 HTML 注入；缺少 `appendTo`、CSP、SSR/无 HTML 入口策略 |
-| 全局 hook       | runtime 与 bridge 通过 `__ELFUI_DEVTOOLS_GLOBAL_HOOK__` 连接  | 仍是同页事件接口，未升级为版本化 RPC/插件协议              |
-| Source 字段展示 | 可读取构造器上的 `__elfSource` 并显示                         | 编译器未系统生成 metadata，Vite 也没有 open-in-editor 服务 |
-| 最小测试        | DevTools 16 个测试，并有真实 ElfUI runtime/app 集成测试       | 已手工浏览器验收；仍缺自动浏览器 E2E、性能和扩展测试       |
+| 能力            | 当前实现                                                                              | 证据/限制                                                  |
+| --------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| 基础协议        | `protocolVersion = 1`，定义 app、component、timeline 快照                             | 只有页面内同步调用，没有请求/响应、握手和跨宿主 transport  |
+| 安全序列化      | 支持循环引用、深度/条目限制及特殊类型摘要                                             | 缺少惰性展开、大对象分页和可编辑路径                       |
+| 组件登记        | runtime 主动发送 app/component 生命周期事件                                           | 晚加载兼容仍使用 DOM 扫描与 MutationObserver               |
+| 基础组件树      | 稳定组件/父 ID；跨 Shadow DOM、Teleport、KeepAlive 保持逻辑树                         | Dynamic、Suspense 与大规模树仍需专项 fixture               |
+| 基础组件详情    | 真实读取 props、attrs、setup、exposed 和 source metadata                              | provides/injects、refs、computed 与响应式依赖尚未接入      |
+| 基础 Inspector  | 悬停高亮、点击选中、Escape 退出                                                       | 没有组件标签、滚动定位、源码跳转、快捷键和双向同步完善     |
+| 基础 Timeline   | 自动采集 state → binding/effect → component/source 与耗时；支持暂停、清空、聚合和限流 | 缺 layer/组件过滤、瀑布/缩放、异步因果合并和完整性能指标   |
+| Vite 开发注入   | `apply: "serve"`，通过虚拟模块加载客户端                                              | 只有 HTML 注入；缺少 `appendTo`、CSP、SSR/无 HTML 入口策略 |
+| 全局 hook       | runtime 与 bridge 通过 `__ELFUI_DEVTOOLS_GLOBAL_HOOK__` 连接                          | 仍是同页事件接口，未升级为版本化 RPC/插件协议              |
+| Source 字段展示 | 可读取构造器上的 `__elfSource` 并显示                                                 | 编译器未系统生成 metadata，Vite 也没有 open-in-editor 服务 |
+| 最小测试        | DevTools 17 个测试，并有真实 ElfUI runtime/app 集成测试                               | 已手工浏览器验收；仍缺自动浏览器 E2E、性能和扩展测试       |
 
 ### 3.2 部分实现但不可视为完成
 
 - **Components**：已有层级缩进和 Inspector 选中联动，但没有折叠、搜索、多选/负向过滤、面包屑和大树虚拟滚动。
 - **应用模型**：已接入 `createApp()` 的稳定 ID 与 mount/unmount；晚加载扫描仍会为未知顶层 host 创建兼容 app，UI 也没有 app selector。
 - **状态检查**：已读取真实 `ComponentInstance` 的 setup state 和 exposed；provide/inject、refs、computed、编辑能力和响应式节点仍未实现。
-- **更新记录**：已关联命名 state 的 trigger、effect、component 与耗时；尚未关联具体 binding/source，也未处理高频聚合和异步多次 trigger 合并语义。
-- **源码定位**：只能显示预先存在的文件行列，不能点击打开编辑器，也没有模板 binding 级位置。
+- **更新记录**：已关联命名 state、binding/effect、component、模板行列与耗时，并支持暂停、清空、16ms 聚合和窗口限流；尚未处理异步多次 trigger 的完整因果合并语义。
+- **源码定位**：常用 interpolation、v-bind、v-on object、v-text、v-html 已生成 binding 行列；仍缺 v-model/控制流、稳定文件 ID/source map 和点击打开编辑器。
 - **UI**：已有 Vue 风格双按钮启动器、默认隐藏的 Shadow DOM 面板和关闭行为；仍缺停靠/缩放、导航、完整键盘操作、主题和布局持久化。
 
 ### 3.3 完全未实现
