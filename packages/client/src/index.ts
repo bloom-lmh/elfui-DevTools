@@ -118,3 +118,8 @@ export class ComponentInspector {
 
 export { DevtoolsPanel } from "./panel";
 export { installElfUIDevtools } from "./bootstrap";
+export {
+  DevtoolsRpcClient,
+  DevtoolsRpcClientError,
+  type DevtoolsRpcClientOptions,
+} from "./rpc-client";

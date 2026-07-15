@@ -1,13 +1,22 @@
 import {
+  DEVTOOLS_RPC_CAPABILITIES,
   DEVTOOLS_PROTOCOL_VERSION,
   serialize,
   type AppSnapshot,
   type ComponentDetailSnapshot,
   type ComponentNodeSnapshot,
+  type DevtoolsCapability,
+  type DevtoolsRpcFailure,
+  type DevtoolsRpcHandler,
+  type DevtoolsRpcRequest,
+  type DevtoolsRpcResponse,
+  type DevtoolsRpcSuccess,
+  type DevtoolsRpcTransport,
   type DevtoolsSnapshot,
   type SerializedValue,
   type SourceLocation,
   type TimelineEvent,
+  type TimelineStatusSnapshot,
 } from "@elfui/devtools-shared";
 
 export interface DevtoolsComponentInput {
@@ -80,11 +89,7 @@ export interface DevtoolsBridgeOptions {
   aggregateWindowMs?: number;
 }
 
-export interface TimelineStatus {
-  paused: boolean;
-  droppedEvents: number;
-  aggregatedEvents: number;
-}
+export type TimelineStatus = TimelineStatusSnapshot;
 
 export type DevtoolsListener = (event: TimelineEvent) => void;
 
@@ -128,7 +133,7 @@ const snapshotValue = (
   }
 };
 
-export class ElfUIDevtoolsBridge {
+export class ElfUIDevtoolsBridge implements DevtoolsRpcHandler {
   private readonly apps = new Map<string, AppRecord>();
   private readonly components = new Map<string, ComponentRecord>();
   private readonly componentIds = new WeakMap<HTMLElement, string>();
@@ -412,6 +417,107 @@ export class ElfUIDevtoolsBridge {
     this.lastAggregationCount = 1;
   }
 
+  public handleRpcRequest(request: DevtoolsRpcRequest): DevtoolsRpcResponse {
+    const requestId =
+      typeof request.requestId === "string" && request.requestId
+        ? request.requestId
+        : "invalid-request";
+    if (request.protocolVersion !== DEVTOOLS_PROTOCOL_VERSION) {
+      return this.rpcFailure(
+        requestId,
+        "PROTOCOL_MISMATCH",
+        `Unsupported protocol version ${request.protocolVersion}; expected ${DEVTOOLS_PROTOCOL_VERSION}`,
+        {
+          received: request.protocolVersion,
+          supported: DEVTOOLS_PROTOCOL_VERSION,
+        },
+      );
+    }
+    if (requestId === "invalid-request") {
+      return this.rpcFailure(
+        requestId,
+        "INVALID_REQUEST",
+        "requestId must be a non-empty string",
+      );
+    }
+
+    try {
+      switch (request.method) {
+        case "protocol.handshake": {
+          const params = request.params;
+          if (
+            !params ||
+            typeof params.clientName !== "string" ||
+            !Array.isArray(params.capabilities)
+          ) {
+            return this.rpcFailure(
+              requestId,
+              "INVALID_PARAMS",
+              "Handshake requires clientName and capabilities",
+            );
+          }
+          const supported = new Set<DevtoolsCapability>(
+            DEVTOOLS_RPC_CAPABILITIES,
+          );
+          const negotiatedCapabilities = params.capabilities.filter(
+            (capability): capability is DevtoolsCapability =>
+              supported.has(capability),
+          );
+          return this.rpcSuccess(requestId, {
+            protocolVersion: DEVTOOLS_PROTOCOL_VERSION,
+            serverName: "@elfui/devtools-runtime",
+            capabilities: [...DEVTOOLS_RPC_CAPABILITIES],
+            negotiatedCapabilities,
+          });
+        }
+        case "app.snapshot":
+          return this.rpcSuccess(requestId, this.getSnapshot());
+        case "component.detail":
+          if (typeof request.params?.id !== "string") {
+            return this.rpcFailure(
+              requestId,
+              "INVALID_PARAMS",
+              "component.detail requires a string id",
+            );
+          }
+          return this.rpcSuccess(
+            requestId,
+            this.getComponentDetail(request.params.id),
+          );
+        case "timeline.list":
+          return this.rpcSuccess(requestId, {
+            status: this.getTimelineStatus(),
+            events: [...this.getTimeline()],
+          });
+        case "timeline.setPaused":
+          if (typeof request.params?.paused !== "boolean") {
+            return this.rpcFailure(
+              requestId,
+              "INVALID_PARAMS",
+              "timeline.setPaused requires a boolean paused value",
+            );
+          }
+          this.setTimelinePaused(request.params.paused);
+          return this.rpcSuccess(requestId, this.getTimelineStatus());
+        case "timeline.clear":
+          this.clearTimeline();
+          return this.rpcSuccess(requestId, this.getTimelineStatus());
+        default:
+          return this.rpcFailure(
+            requestId,
+            "METHOD_NOT_FOUND",
+            `Unknown RPC method: ${String((request as { method?: unknown }).method)}`,
+          );
+      }
+    } catch (error) {
+      return this.rpcFailure(
+        requestId,
+        "INTERNAL_ERROR",
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
   public on(listener: DevtoolsListener): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
@@ -519,11 +625,52 @@ export class ElfUIDevtoolsBridge {
       this.timeline.splice(0, this.timeline.length - this.maxTimelineEvents);
     for (const listener of this.listeners) listener(timelineEvent);
   }
+
+  private rpcSuccess<Result>(
+    requestId: string,
+    result: Result,
+  ): DevtoolsRpcSuccess<Result> {
+    return {
+      protocolVersion: DEVTOOLS_PROTOCOL_VERSION,
+      requestId,
+      ok: true,
+      result,
+    };
+  }
+
+  private rpcFailure(
+    requestId: string,
+    code: DevtoolsRpcFailure["error"]["code"],
+    message: string,
+    data?: unknown,
+  ): DevtoolsRpcFailure {
+    return {
+      protocolVersion: DEVTOOLS_PROTOCOL_VERSION,
+      requestId,
+      ok: false,
+      error: { code, message, ...(data === undefined ? {} : { data }) },
+    };
+  }
 }
 
 export const createDevtoolsBridge = (
   options?: DevtoolsBridgeOptions,
 ): ElfUIDevtoolsBridge => new ElfUIDevtoolsBridge(options);
+
+export const createInPageDevtoolsTransport = (
+  handler: DevtoolsRpcHandler,
+): DevtoolsRpcTransport => {
+  let disposed = false;
+  return {
+    request: async (request) => {
+      if (disposed) throw new Error("ElfUI DevTools transport is disposed");
+      return await handler.handleRpcRequest(request);
+    },
+    dispose: () => {
+      disposed = true;
+    },
+  };
+};
 
 export const DEVTOOLS_GLOBAL_HOOK = "__ELFUI_DEVTOOLS_GLOBAL_HOOK__";
 

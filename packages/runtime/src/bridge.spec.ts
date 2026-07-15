@@ -326,4 +326,35 @@ describe("ElfUIDevtoolsBridge", () => {
     expect(bridge.getTimeline()[0]?.summary).toContain("×2");
     expect(bridge.getTimelineStatus().aggregatedEvents).toBe(1);
   });
+
+  it("returns structured RPC errors for incompatible or invalid requests", () => {
+    const bridge = createDevtoolsBridge();
+    const incompatible = bridge.handleRpcRequest({
+      protocolVersion: 99,
+      requestId: "old-client:1",
+      method: "app.snapshot",
+      params: {},
+    });
+    expect(incompatible).toMatchObject({
+      protocolVersion: 1,
+      requestId: "old-client:1",
+      ok: false,
+      error: {
+        code: "PROTOCOL_MISMATCH",
+        data: { received: 99, supported: 1 },
+      },
+    });
+
+    const invalid = bridge.handleRpcRequest({
+      protocolVersion: 1,
+      requestId: "client:2",
+      method: "timeline.setPaused",
+      params: { paused: "yes" },
+    } as never);
+    expect(invalid).toMatchObject({
+      requestId: "client:2",
+      ok: false,
+      error: { code: "INVALID_PARAMS" },
+    });
+  });
 });

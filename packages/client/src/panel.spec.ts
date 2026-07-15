@@ -1,6 +1,10 @@
-import { afterEach, describe, expect, it } from "vitest";
-import { createDevtoolsBridge } from "@elfui/devtools-runtime";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  createDevtoolsBridge,
+  createInPageDevtoolsTransport,
+} from "@elfui/devtools-runtime";
 import { DevtoolsPanel } from "./panel";
+import { DevtoolsRpcClient } from "./rpc-client";
 
 describe("DevtoolsPanel", () => {
   afterEach(() => document.body.replaceChildren());
@@ -57,5 +61,33 @@ describe("DevtoolsPanel", () => {
       ?.click();
     expect(bridge.getTimeline()).toHaveLength(0);
     panel.dispose();
+  });
+
+  it("reads panel data and controls the timeline through RPC", async () => {
+    const bridge = createDevtoolsBridge();
+    const host = document.createElement("elf-rpc-panel");
+    bridge.registerComponent({ host, tag: "elf-rpc-panel" });
+    const rpc = new DevtoolsRpcClient(createInPageDevtoolsTransport(bridge));
+    await rpc.connect();
+    const panel = new DevtoolsPanel(bridge, document, rpc);
+    const shadow = document.querySelector<HTMLElement>(
+      "[data-elfui-devtools=host]",
+    )?.shadowRoot;
+
+    await vi.waitFor(() => {
+      expect(shadow?.textContent).toContain("<elf-rpc-panel>");
+    });
+    shadow
+      ?.querySelector<HTMLButtonElement>('[aria-label="Pause timeline"]')
+      ?.click();
+    await vi.waitFor(() => {
+      expect(bridge.getTimelineStatus().paused).toBe(true);
+      expect(
+        shadow?.querySelector('[aria-label="Resume timeline"]'),
+      ).not.toBeNull();
+    });
+
+    panel.dispose();
+    rpc.dispose();
   });
 });

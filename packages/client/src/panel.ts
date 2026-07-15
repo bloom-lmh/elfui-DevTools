@@ -1,7 +1,14 @@
-import type { SerializedValue } from "@elfui/devtools-shared";
+import type {
+  ComponentDetailSnapshot,
+  DevtoolsSnapshot,
+  SerializedValue,
+  TimelineEvent,
+  TimelineStatusSnapshot,
+} from "@elfui/devtools-shared";
 import type { ElfUIDevtoolsBridge } from "@elfui/devtools-runtime";
 
 import { ComponentInspector } from "./index";
+import type { DevtoolsRpcClient } from "./rpc-client";
 
 const valueText = (value: SerializedValue): string => {
   if (value.kind === "primitive") return JSON.stringify(value.value);
@@ -123,10 +130,12 @@ export class DevtoolsPanel {
   private selectedId: string | null = null;
   private visible = false;
   private readonly stop: () => void;
+  private renderGeneration = 0;
 
   public constructor(
     private readonly bridge: ElfUIDevtoolsBridge,
     private readonly document: Document = window.document,
+    private readonly rpc?: DevtoolsRpcClient,
   ) {
     this.host = document.createElement("div");
     this.host.dataset.elfuiDevtools = "host";
@@ -215,10 +224,37 @@ export class DevtoolsPanel {
   }
 
   private render(): void {
-    const snapshot = this.bridge.getSnapshot();
+    const generation = ++this.renderGeneration;
+    if (this.rpc) {
+      void this.renderFromRpc(generation);
+      return;
+    }
+    this.renderView(
+      this.bridge.getSnapshot(),
+      this.selectedId ? this.bridge.getComponentDetail(this.selectedId) : null,
+      this.bridge.getTimelineStatus(),
+      this.bridge.getTimeline(),
+    );
+  }
+
+  private async renderFromRpc(generation: number): Promise<void> {
+    const [snapshot, timeline] = await Promise.all([
+      this.rpc!.getSnapshot(),
+      this.rpc!.getTimeline(),
+    ]);
     const detail = this.selectedId
-      ? this.bridge.getComponentDetail(this.selectedId)
+      ? await this.rpc!.getComponentDetail(this.selectedId)
       : null;
+    if (generation !== this.renderGeneration) return;
+    this.renderView(snapshot, detail, timeline.status, timeline.events);
+  }
+
+  private renderView(
+    snapshot: DevtoolsSnapshot,
+    detail: ComponentDetailSnapshot | null,
+    timelineStatus: TimelineStatusSnapshot,
+    timelineEvents: readonly TimelineEvent[],
+  ): void {
     this.content.replaceChildren();
 
     const header = this.document.createElement("div");
@@ -266,7 +302,6 @@ export class DevtoolsPanel {
     timelineHeading.className = "section-heading";
     const timelineTitle = this.document.createElement("p");
     timelineTitle.className = "section-title";
-    const timelineStatus = this.bridge.getTimelineStatus();
     const statusParts = [
       timelineStatus.aggregatedEvents
         ? `${timelineStatus.aggregatedEvents} aggregated`
@@ -286,22 +321,32 @@ export class DevtoolsPanel {
       timelineStatus.paused ? "Resume timeline" : "Pause timeline",
     );
     pause.onclick = () => {
-      this.bridge.setTimelinePaused(!timelineStatus.paused);
-      this.render();
+      if (this.rpc) {
+        void this.rpc
+          .setTimelinePaused(!timelineStatus.paused)
+          .then(() => this.render());
+      } else {
+        this.bridge.setTimelinePaused(!timelineStatus.paused);
+        this.render();
+      }
     };
     const clear = this.document.createElement("button");
     clear.type = "button";
     clear.textContent = "Clear";
     clear.setAttribute("aria-label", "Clear timeline");
     clear.onclick = () => {
-      this.bridge.clearTimeline();
-      this.render();
+      if (this.rpc) {
+        void this.rpc.clearTimeline().then(() => this.render());
+      } else {
+        this.bridge.clearTimeline();
+        this.render();
+      }
     };
     timelineActions.append(pause, clear);
     timelineHeading.append(timelineTitle, timelineActions);
     const timeline = this.document.createElement("ol");
     timeline.dataset.elfuiDevtools = "timeline";
-    for (const event of this.bridge.getTimeline().slice(-20).reverse()) {
+    for (const event of timelineEvents.slice(-20).reverse()) {
       const item = this.document.createElement("li");
       item.textContent = `${event.layer}:${event.type} — ${event.summary}`;
       timeline.append(item);
