@@ -26,10 +26,12 @@
 - [x] `elfui-docs` 本地开发配置完成 Vite 插件接入，并通过真实浏览器验证双入口和面板开关。
 - [x] macro compiler 自动为每个组件注入开发态 `__elfSource` 文件、起止行列；binding 相对坐标已映射为真实文件坐标。
 - [x] Vite 已提供受项目根目录约束的 open-in-editor endpoint；组件详情可点击打开准确文件、行、列，并拒绝目录穿越。
-- [ ] Phase 0 剩余：Dynamic/Suspense fixture、浏览器 GC 验证、跨平台稳定文件 ID/source map remapping。
+- [x] Dynamic 与 Suspense 已补真实 ElfUI Custom Element fixture；旧分支延迟卸载、新分支先挂载后，parentId 和最终逻辑树保持正确。
+- [x] Chromium CDP 强制 GC 已验证：只被 DevTools bridge 登记的 host 可被回收，WeakRef 不形成强引用；app 清理后元数据记录归零。
+- [ ] Phase 0 剩余：跨平台稳定文件 ID/source map remapping。
 - [ ] Phase 1 剩余：停靠/缩放/全屏、导航与 app selector、主题和布局持久化、完整键盘/ARIA、视觉 E2E。
 
-下一步严格按顺序推进：先完成 Dynamic/Suspense fixture 与浏览器 GC 验证，再补跨平台稳定文件 ID/source map remapping，之后完善面板外壳；跨宿主事件 transport 留在平台阶段，在这些验收完成前不进入 Assets、Graph、浏览器扩展或 standalone。
+下一步严格按顺序推进：补齐跨平台稳定文件 ID/source map remapping，随后完成 Phase 1 面板外壳；跨宿主事件 transport 留在平台阶段，在这些验收完成前不进入 Assets、Graph、浏览器扩展或 standalone。
 
 ## 1. 目标与边界
 
@@ -78,19 +80,19 @@ Vue DevTools 的仓库也按 client、core、devtools-kit、devtools-api、overl
 
 ### 3.1 已实现
 
-| 能力           | 当前实现                                                                              | 证据/限制                                                |
-| -------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| 基础协议       | `protocolVersion = 1`；带 requestId 的 RPC、能力握手、结构化错误及 in-page transport  | 缺通知/订阅、取消/超时和跨宿主 transport                 |
-| 安全序列化     | 支持循环引用、深度/条目限制及特殊类型摘要                                             | 缺少惰性展开、大对象分页和可编辑路径                     |
-| 组件登记       | runtime 主动发送 app/component 生命周期事件                                           | 晚加载兼容仍使用 DOM 扫描与 MutationObserver             |
-| 基础组件树     | 稳定组件/父 ID；跨 Shadow DOM、Teleport、KeepAlive 保持逻辑树                         | Dynamic、Suspense 与大规模树仍需专项 fixture             |
-| 基础组件详情   | 真实读取 props、attrs、setup、exposed 和 source metadata                              | provides/injects、refs、computed 与响应式依赖尚未接入    |
-| 基础 Inspector | 悬停高亮、点击选中、Escape 退出、组件详情打开源码                                     | 没有组件标签、滚动定位、快捷键和双向同步完善             |
-| 基础 Timeline  | 自动采集 state → binding/effect → component/source 与耗时；支持暂停、清空、聚合和限流 | 缺 layer/组件过滤、瀑布/缩放、异步因果合并和完整性能指标 |
-| Vite 开发注入  | `apply: "serve"`，通过虚拟模块加载客户端；提供根目录受限的 open-in-editor middleware  | 缺少 `appendTo`、CSP、SSR/无 HTML 入口策略               |
-| 全局 hook      | runtime 事件保留开发态直连；bridge 同时暴露版本化 RPC endpoint                        | DOM Inspector 仍需页面侧引用；缺插件协议和跨宿主事件桥   |
-| Source 定位    | compiler 自动生成组件起止位置，binding 坐标映射到真实文件；面板可打开编辑器           | 缺跨平台稳定文件 ID、source map remapping 与浏览器 E2E   |
-| 最小测试       | DevTools 25 个测试，并有真实 ElfUI runtime/app/RPC 集成测试                           | 已手工浏览器验收；仍缺自动浏览器 E2E、性能和扩展测试     |
+| 能力           | 当前实现                                                                              | 证据/限制                                                 |
+| -------------- | ------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| 基础协议       | `protocolVersion = 1`；带 requestId 的 RPC、能力握手、结构化错误及 in-page transport  | 缺通知/订阅、取消/超时和跨宿主 transport                  |
+| 安全序列化     | 支持循环引用、深度/条目限制及特殊类型摘要                                             | 缺少惰性展开、大对象分页和可编辑路径                      |
+| 组件登记       | runtime 主动发送 app/component 生命周期事件                                           | 晚加载兼容仍使用 DOM 扫描与 MutationObserver              |
+| 基础组件树     | 稳定组件/父 ID；跨 Shadow DOM、Teleport、KeepAlive、Dynamic、Suspense 保持逻辑树      | 大规模树仍需专项 fixture                                  |
+| 基础组件详情   | 真实读取 props、attrs、setup、exposed 和 source metadata                              | provides/injects、refs、computed 与响应式依赖尚未接入     |
+| 基础 Inspector | 悬停高亮、点击选中、Escape 退出、组件详情打开源码                                     | 没有组件标签、滚动定位、快捷键和双向同步完善              |
+| 基础 Timeline  | 自动采集 state → binding/effect → component/source 与耗时；支持暂停、清空、聚合和限流 | 缺 layer/组件过滤、瀑布/缩放、异步因果合并和完整性能指标  |
+| Vite 开发注入  | `apply: "serve"`，通过虚拟模块加载客户端；提供根目录受限的 open-in-editor middleware  | 缺少 `appendTo`、CSP、SSR/无 HTML 入口策略                |
+| 全局 hook      | runtime 事件保留开发态直连；bridge 同时暴露版本化 RPC endpoint                        | DOM Inspector 仍需页面侧引用；缺插件协议和跨宿主事件桥    |
+| Source 定位    | compiler 自动生成组件起止位置，binding 坐标映射到真实文件；面板可打开编辑器           | 缺跨平台稳定文件 ID、source map remapping 与浏览器 E2E    |
+| 最小测试       | DevTools 26 个测试，并有真实 ElfUI runtime/app/RPC/Dynamic/Suspense 集成测试          | 已做 Chromium GC 验收；仍缺自动浏览器 E2E、性能和扩展测试 |
 
 ### 3.2 部分实现但不可视为完成
 
@@ -314,16 +316,16 @@ Vue DevTools 的仓库也按 client、core、devtools-kit、devtools-api、overl
 
 ## 7. 测试与质量门槛
 
-| 层级               | 必须覆盖                                                                 |
-| ------------------ | ------------------------------------------------------------------------ |
-| 单元测试           | serializer、RPC、能力协商、树构建、过滤、状态编辑、插件生命周期          |
-| ElfUI runtime 集成 | Shadow DOM、Teleport、KeepAlive、Suspense、async setup、错误边界、多 app |
-| Vite 集成          | 注入、appendTo、CSP、open-editor、生产排除、模块图、transform inspect    |
-| 浏览器 E2E         | launcher、Inspector、树/页面同步、编辑、Timeline、Router、设置持久化     |
-| 跨宿主契约         | in-page、extension、standalone 对同一协议测试套件                        |
-| 性能               | 5,000 组件、大对象、10,000 高频事件、长时间运行、关闭后的 GC             |
-| 安全               | serializer 脱敏、路径穿越、消息来源、插件权限、CSP、任意代码执行防护     |
-| 可访问性           | 键盘操作、焦点、ARIA、对比度、缩放、减少动画                             |
+| 层级               | 必须覆盖                                                                          |
+| ------------------ | --------------------------------------------------------------------------------- |
+| 单元测试           | serializer、RPC、能力协商、树构建、过滤、状态编辑、插件生命周期                   |
+| ElfUI runtime 集成 | Shadow DOM、Teleport、KeepAlive、Dynamic、Suspense、async setup、错误边界、多 app |
+| Vite 集成          | 注入、appendTo、CSP、open-editor、生产排除、模块图、transform inspect             |
+| 浏览器 E2E         | launcher、Inspector、树/页面同步、编辑、Timeline、Router、设置持久化              |
+| 跨宿主契约         | in-page、extension、standalone 对同一协议测试套件                                 |
+| 性能               | 5,000 组件、大对象、10,000 高频事件、长时间运行、关闭后的 GC                      |
+| 安全               | serializer 脱敏、路径穿越、消息来源、插件权限、CSP、任意代码执行防护              |
+| 可访问性           | 键盘操作、焦点、ARIA、对比度、缩放、减少动画                                      |
 
 每个 Phase 完成条件：实现代码、自动化测试、文档、真实 `elfui-docs` 验收场景四项同时完成；仅有协议字段或静态 UI 不计为功能完成。
 

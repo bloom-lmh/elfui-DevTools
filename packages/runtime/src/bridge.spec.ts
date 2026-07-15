@@ -211,6 +211,50 @@ describe("ElfUIDevtoolsBridge", () => {
     });
   });
 
+  it("settles Dynamic and Suspense branch replacement to one logical child", () => {
+    const bridge = createDevtoolsBridge();
+    const parent = document.createElement("elf-branch-parent");
+    const dynamicBefore = document.createElement("elf-dynamic-before");
+    const dynamicAfter = document.createElement("elf-dynamic-after");
+    const fallback = document.createElement("elf-suspense-fallback");
+    const resolved = document.createElement("elf-suspense-resolved");
+    const mount = (id: string, host: HTMLElement, tag: string): void => {
+      bridge.emitRuntimeEvent({
+        type: "component:mount",
+        component: {
+          id,
+          parentId: id === "branch:parent" ? null : "branch:parent",
+          appId: "branch:app",
+          host,
+          tag,
+        },
+      });
+    };
+
+    mount("branch:parent", parent, "elf-branch-parent");
+    mount("branch:dynamic-before", dynamicBefore, "elf-dynamic-before");
+    mount("branch:dynamic-after", dynamicAfter, "elf-dynamic-after");
+    bridge.emitRuntimeEvent({ type: "component:unmount", host: dynamicBefore });
+    mount("branch:fallback", fallback, "elf-suspense-fallback");
+    mount("branch:resolved", resolved, "elf-suspense-resolved");
+    bridge.emitRuntimeEvent({ type: "component:unmount", host: fallback });
+
+    expect(bridge.getSnapshot()).toMatchObject({
+      apps: [{ id: "branch:app", rootIds: ["branch:parent"] }],
+      components: [
+        {
+          id: "branch:parent",
+          children: ["branch:dynamic-after", "branch:resolved"],
+        },
+        { id: "branch:dynamic-after", parentId: "branch:parent" },
+        { id: "branch:resolved", parentId: "branch:parent" },
+      ],
+    });
+
+    bridge.emitRuntimeEvent({ type: "component:unmount", host: parent });
+    expect(bridge.getSnapshot().components).toEqual([]);
+  });
+
   it("adds state trigger and effect causality to the reactivity timeline", () => {
     const bridge = createDevtoolsBridge();
     const host = document.createElement("elf-reactivity-counter");
