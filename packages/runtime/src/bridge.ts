@@ -284,7 +284,7 @@ export class ElfUIDevtoolsBridge implements DevtoolsRpcHandler {
     this.apps.delete(id);
   }
 
-  public emitRuntimeEvent(event: ElfUIRuntimeEvent): void {
+  public readonly emitRuntimeEvent = (event: ElfUIRuntimeEvent): void => {
     switch (event.type) {
       case "app:mount":
         this.registerApp(event.app.id, event.app.label);
@@ -318,9 +318,9 @@ export class ElfUIDevtoolsBridge implements DevtoolsRpcHandler {
         break;
       }
     }
-  }
+  };
 
-  public emitReactivityEvent(event: ElfUIReactivityEvent): void {
+  public readonly emitReactivityEvent = (event: ElfUIReactivityEvent): void => {
     const componentIds =
       event.type === "reactivity:trigger"
         ? event.effects.flatMap((effect) =>
@@ -365,7 +365,7 @@ export class ElfUIDevtoolsBridge implements DevtoolsRpcHandler {
       summary,
       data: serialize(event),
     });
-  }
+  };
 
   public getSnapshot(): DevtoolsSnapshot {
     return {

@@ -95,12 +95,20 @@ const inputFor = (host: HTMLElement): DevtoolsComponentInput => {
   };
 };
 
-const visit = (root: Node, callback: (host: HTMLElement) => void): void => {
+const visit = (
+  root: Node,
+  callback: (host: HTMLElement) => void,
+  onUnresolvedCustomElement?: (host: HTMLElement) => void,
+): void => {
   if (isElfUIHost(root)) callback(root);
+  else if (root instanceof HTMLElement && root.localName.includes("-"))
+    onUnresolvedCustomElement?.(root);
   for (const element of Array.from(
     (root as ParentNode).querySelectorAll?.("*") ?? [],
   )) {
     if (isElfUIHost(element)) callback(element);
+    else if (element instanceof HTMLElement && element.localName.includes("-"))
+      onUnresolvedCustomElement?.(element);
   }
 };
 
@@ -113,13 +121,37 @@ export const installElfUIAdapter = (
   bridge: ElfUIDevtoolsBridge,
   root: ParentNode = document,
 ): ElfUIAdapter => {
+  const documentForRoot =
+    root instanceof Document ? root : (root.ownerDocument ?? document);
+  const registry = documentForRoot.defaultView?.customElements;
+  const pendingDefinitions = new Set<string>();
+  let disconnected = false;
+
+  const watchForUpgrade = (host: HTMLElement): void => {
+    if (!registry) return;
+    const tag = host.localName;
+    if (pendingDefinitions.has(tag)) return;
+    pendingDefinitions.add(tag);
+    void registry.whenDefined(tag).then(() => {
+      pendingDefinitions.delete(tag);
+      if (!disconnected) queueMicrotask(scan);
+    });
+  };
   const scan = (): void =>
-    visit(root as Node, (host) => bridge.registerComponent(inputFor(host)));
+    visit(
+      root as Node,
+      (host) => bridge.registerComponent(inputFor(host)),
+      watchForUpgrade,
+    );
   scan();
   const observer = new MutationObserver((records) => {
     for (const record of records) {
       for (const node of Array.from(record.addedNodes))
-        visit(node, (host) => bridge.registerComponent(inputFor(host)));
+        visit(
+          node,
+          (host) => bridge.registerComponent(inputFor(host)),
+          watchForUpgrade,
+        );
       for (const node of Array.from(record.removedNodes)) {
         visit(node, (host) =>
           queueMicrotask(() => {
@@ -130,5 +162,11 @@ export const installElfUIAdapter = (
     }
   });
   observer.observe(root, { childList: true, subtree: true });
-  return { disconnect: () => observer.disconnect(), scan };
+  return {
+    disconnect: () => {
+      disconnected = true;
+      observer.disconnect();
+    },
+    scan,
+  };
 };

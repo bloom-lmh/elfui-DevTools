@@ -79,6 +79,41 @@ describe("ElfUIDevtoolsBridge", () => {
     expect(target[DEVTOOLS_GLOBAL_HOOK]).toBe("previous");
   });
 
+  it("keeps global runtime and reactivity hook methods bound", () => {
+    const target: Record<string, unknown> = {};
+    const bridge = createDevtoolsBridge();
+    const dispose = installGlobalDevtoolsBridge(bridge, target);
+    const hook = target[DEVTOOLS_GLOBAL_HOOK] as {
+      emitRuntimeEvent: typeof bridge.emitRuntimeEvent;
+      emitReactivityEvent: typeof bridge.emitReactivityEvent;
+    };
+    const host = document.createElement("elf-bound-counter");
+    const emitRuntimeEvent = hook.emitRuntimeEvent;
+    emitRuntimeEvent({
+      type: "component:mount",
+      component: {
+        id: "elfui-component:bound",
+        host,
+        tag: "elf-bound-counter",
+      },
+    });
+    const emitReactivityEvent = hook.emitReactivityEvent;
+    emitReactivityEvent({
+      type: "reactivity:effect",
+      triggerId: "elfui-trigger:bound",
+      effectId: "elfui-effect:bound",
+      componentId: "elfui-component:bound",
+      duration: 1,
+    });
+
+    expect(bridge.getSnapshot().components).toHaveLength(1);
+    expect(bridge.getTimeline().map((event) => event.layer)).toEqual([
+      "component",
+      "reactivity",
+    ]);
+    dispose();
+  });
+
   it("consumes real ElfUI runtime app, component, update, and emit events", () => {
     const bridge = createDevtoolsBridge({ now: () => 25 });
     const host = document.createElement("elf-runtime-counter");

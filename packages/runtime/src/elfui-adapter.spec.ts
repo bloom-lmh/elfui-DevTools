@@ -49,4 +49,35 @@ describe("installElfUIAdapter", () => {
     expect(bridge.getSnapshot().components).toHaveLength(0);
     adapter.disconnect();
   });
+
+  it("discovers an existing macro component after its custom element upgrades", async () => {
+    const host = document.createElement("elf-adapter-late-counter");
+    document.body.appendChild(host);
+    const bridge = createDevtoolsBridge();
+    const adapter = installElfUIAdapter(bridge);
+
+    expect(bridge.getSnapshot().components).toHaveLength(0);
+
+    class LateCounter extends HTMLElement {
+      public static __elfDefinition = {
+        tag: "elf-adapter-late-counter",
+        props: {},
+        shadow: "open" as const,
+      };
+
+      public constructor() {
+        super();
+        (this as unknown as Record<symbol, unknown>)[INSTANCE_KEY] = {};
+      }
+    }
+    customElements.define("elf-adapter-late-counter", LateCounter);
+    await customElements.whenDefined("elf-adapter-late-counter");
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(bridge.getSnapshot().components).toMatchObject([
+      { tag: "elf-adapter-late-counter" },
+    ]);
+    adapter.disconnect();
+  });
 });
