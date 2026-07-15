@@ -11,8 +11,10 @@ import {
 } from "@elfui/devtools-shared";
 
 export interface DevtoolsComponentInput {
+  id?: string;
   host: HTMLElement;
   appId?: string | null;
+  parentId?: string | null;
   parentHost?: HTMLElement | null;
   tag: string;
   displayName?: string;
@@ -58,7 +60,8 @@ interface ComponentRecord {
   id: string;
   appId: string;
   parentId: string | null;
-  input: DevtoolsComponentInput;
+  host: WeakRef<HTMLElement>;
+  input: Omit<DevtoolsComponentInput, "host" | "parentHost">;
   mounted: boolean;
   children: Set<string>;
   updateCount: number;
@@ -108,19 +111,29 @@ export class ElfUIDevtoolsBridge {
     const existingId = this.componentIds.get(input.host);
     if (existingId) return existingId;
 
-    const parentId = this.findParentId(input.host, input.parentHost);
+    const parentId =
+      input.parentId !== undefined
+        ? input.parentId
+        : this.findParentId(input.host, input.parentHost);
     const parent = parentId ? this.components.get(parentId) : undefined;
     const appId =
       parent?.appId ??
       input.appId ??
       this.createApp(input.displayName ?? input.tag);
     this.ensureApp(appId, input.displayName ?? input.tag);
-    const id = `component:${this.nextComponentId++}`;
+    const requestedId = input.id;
+    const id =
+      requestedId && !this.components.has(requestedId)
+        ? requestedId
+        : `component:${this.nextComponentId++}`;
+    const { host, parentHost: _parentHost, ...storedInput } = input;
+    void _parentHost;
     const record: ComponentRecord = {
       id,
       appId,
       parentId,
-      input,
+      host: new WeakRef(host),
+      input: storedInput,
       mounted: true,
       children: new Set(),
       updateCount: 0,
@@ -128,9 +141,12 @@ export class ElfUIDevtoolsBridge {
       error: null,
     };
     this.components.set(id, record);
-    this.componentIds.set(input.host, id);
+    this.componentIds.set(host, id);
     if (parent) parent.children.add(id);
-    else this.apps.get(appId)?.rootIds.add(id);
+    else if (!parentId) this.apps.get(appId)?.rootIds.add(id);
+    for (const child of this.components.values()) {
+      if (child.parentId === id) record.children.add(child.id);
+    }
     this.emit({
       appId,
       componentId: id,
@@ -144,16 +160,24 @@ export class ElfUIDevtoolsBridge {
   public unregisterComponent(host: HTMLElement): void {
     const id = this.componentIds.get(host);
     if (!id) return;
+    this.removeComponent(id);
+  }
+
+  private removeComponent(id: string): void {
     const record = this.components.get(id);
     if (!record) return;
 
+    for (const childId of Array.from(record.children)) {
+      this.removeComponent(childId);
+    }
     const parent = record.parentId
       ? this.components.get(record.parentId)
       : undefined;
     if (parent) parent.children.delete(id);
     else this.apps.get(record.appId)?.rootIds.delete(id);
     this.components.delete(id);
-    this.componentIds.delete(host);
+    const host = record.host.deref();
+    if (host) this.componentIds.delete(host);
     this.emit({
       appId: record.appId,
       componentId: id,
@@ -199,8 +223,7 @@ export class ElfUIDevtoolsBridge {
 
   public unregisterApp(id: string): void {
     for (const component of Array.from(this.components.values())) {
-      if (component.appId === id)
-        this.unregisterComponent(component.input.host);
+      if (component.appId === id) this.removeComponent(component.id);
     }
     this.apps.delete(id);
   }

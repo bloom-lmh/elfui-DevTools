@@ -13,14 +13,16 @@
 - [x] `createApp()` 分配稳定 app ID，并发出 app mount/unmount 开发态事件。
 - [x] ElfUI runtime 发出 component mount/update/unmount/error/emit 事件；update 按微任务合并。
 - [x] runtime debug record 已接入 props、attrs、setup state、exposed、source metadata。
+- [x] runtime 为组件分配稳定 ID，记录逻辑 parent ID/children；Teleport、KeepAlive 保留逻辑 owner。
+- [x] bridge 支持子组件先于父组件注册、多 app 隔离、递归卸载，并用 WeakRef 保存 host。
 - [x] DevTools bridge 优先消费 runtime 事件；保留 DOM 扫描作为晚加载兼容路径。
 - [x] 页面底部居中双按钮、默认隐藏面板、Inspector 选中后自动打开面板。
 - [x] DevTools UI 使用 Shadow DOM 隔离；补充 bridge、adapter、panel 和 runtime 集成测试。
 - [x] `elfui-docs` 本地开发配置完成 Vite 插件接入，并通过真实浏览器验证双入口和面板开关。
-- [ ] Phase 0 剩余：逻辑父子记录、Teleport/KeepAlive fixture、WeakRef/GC、reactivity 链路、版本化 RPC 与能力协商。
+- [ ] Phase 0 剩余：Dynamic/Suspense fixture、浏览器 GC 验证、reactivity 因果链、版本化 RPC 与能力协商。
 - [ ] Phase 1 剩余：停靠/缩放/全屏、导航与 app selector、主题和布局持久化、完整键盘/ARIA、视觉 E2E。
 
-下一步严格按顺序推进：先完成逻辑组件树与可回收 debug record，再做响应式因果链和 RPC，之后完善面板外壳；在这些验收完成前不进入 Assets、Graph、浏览器扩展或 standalone。
+下一步严格按顺序推进：先接入响应式因果链，再完成版本化 RPC 与能力协商，之后完善面板外壳；在这些验收完成前不进入 Assets、Graph、浏览器扩展或 standalone。
 
 ## 1. 目标与边界
 
@@ -69,19 +71,19 @@ Vue DevTools 的仓库也按 client、core、devtools-kit、devtools-api、overl
 
 ### 3.1 已实现
 
-| 能力            | 当前实现                                                     | 证据/限制                                                   |
-| --------------- | ------------------------------------------------------------ | ----------------------------------------------------------- |
-| 基础协议        | `protocolVersion = 1`，定义 app、component、timeline 快照    | 只有页面内同步调用，没有请求/响应、握手和跨宿主 transport   |
-| 安全序列化      | 支持循环引用、深度/条目限制及特殊类型摘要                    | 缺少惰性展开、大对象分页和可编辑路径                        |
-| 组件登记        | runtime 主动发送 app/component 生命周期事件                  | 晚加载兼容仍使用 DOM 扫描与 MutationObserver                |
-| 基础组件树      | runtime 传递 app ID 和父 host，client 按层级缩进             | 仍不是完整逻辑树；Teleport、KeepAlive、动态组件需补 fixture |
-| 基础组件详情    | 真实读取 props、attrs、setup、exposed 和 source metadata     | provides/injects、refs、computed 与响应式依赖尚未接入       |
-| 基础 Inspector  | 悬停高亮、点击选中、Escape 退出                              | 没有组件标签、滚动定位、源码跳转、快捷键和双向同步完善      |
-| 基础 Timeline   | 自动采集 mount/unmount/update/error/emit，update 微任务合并  | 没有时长、过滤、性能指标和响应式因果链                      |
-| Vite 开发注入   | `apply: "serve"`，通过虚拟模块加载客户端                     | 只有 HTML 注入；缺少 `appendTo`、CSP、SSR/无 HTML 入口策略  |
-| 全局 hook       | runtime 与 bridge 通过 `__ELFUI_DEVTOOLS_GLOBAL_HOOK__` 连接 | 仍是同页事件接口，未升级为版本化 RPC/插件协议               |
-| Source 字段展示 | 可读取构造器上的 `__elfSource` 并显示                        | 编译器未系统生成 metadata，Vite 也没有 open-in-editor 服务  |
-| 最小测试        | DevTools 13 个测试，并有真实 ElfUI runtime/app 集成测试      | 已手工浏览器验收；仍缺自动浏览器 E2E、性能和扩展测试        |
+| 能力            | 当前实现                                                      | 证据/限制                                                  |
+| --------------- | ------------------------------------------------------------- | ---------------------------------------------------------- |
+| 基础协议        | `protocolVersion = 1`，定义 app、component、timeline 快照     | 只有页面内同步调用，没有请求/响应、握手和跨宿主 transport  |
+| 安全序列化      | 支持循环引用、深度/条目限制及特殊类型摘要                     | 缺少惰性展开、大对象分页和可编辑路径                       |
+| 组件登记        | runtime 主动发送 app/component 生命周期事件                   | 晚加载兼容仍使用 DOM 扫描与 MutationObserver               |
+| 基础组件树      | 稳定组件/父 ID；跨 Shadow DOM、Teleport、KeepAlive 保持逻辑树 | Dynamic、Suspense 与大规模树仍需专项 fixture               |
+| 基础组件详情    | 真实读取 props、attrs、setup、exposed 和 source metadata      | provides/injects、refs、computed 与响应式依赖尚未接入      |
+| 基础 Inspector  | 悬停高亮、点击选中、Escape 退出                               | 没有组件标签、滚动定位、源码跳转、快捷键和双向同步完善     |
+| 基础 Timeline   | 自动采集 mount/unmount/update/error/emit，update 微任务合并   | 没有时长、过滤、性能指标和响应式因果链                     |
+| Vite 开发注入   | `apply: "serve"`，通过虚拟模块加载客户端                      | 只有 HTML 注入；缺少 `appendTo`、CSP、SSR/无 HTML 入口策略 |
+| 全局 hook       | runtime 与 bridge 通过 `__ELFUI_DEVTOOLS_GLOBAL_HOOK__` 连接  | 仍是同页事件接口，未升级为版本化 RPC/插件协议              |
+| Source 字段展示 | 可读取构造器上的 `__elfSource` 并显示                         | 编译器未系统生成 metadata，Vite 也没有 open-in-editor 服务 |
+| 最小测试        | DevTools 15 个测试，并有真实 ElfUI runtime/app 集成测试       | 已手工浏览器验收；仍缺自动浏览器 E2E、性能和扩展测试       |
 
 ### 3.2 部分实现但不可视为完成
 

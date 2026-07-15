@@ -18,6 +18,8 @@ interface ElfUIConstructor extends CustomElementConstructor {
 
 interface ElfUIInstanceDebugState {
   devtools?: {
+    id?: string;
+    parentId?: string | null;
     props?: Record<string, unknown>;
     setup?: Record<string, unknown>;
     exposed?: Record<string, unknown>;
@@ -63,9 +65,14 @@ const inputFor = (host: HTMLElement): DevtoolsComponentInput => {
   const source = (host.constructor as ElfUIConstructor).__elfSource;
   const propNames = Object.keys(definition.props ?? {});
   const debug = instanceFor(host)?.devtools;
+  const hostRef = new WeakRef(host);
   return {
+    ...(typeof debug?.id === "string" ? { id: debug.id } : {}),
     host,
     appId: appIdFor(host),
+    ...(typeof debug?.parentId === "string" || debug?.parentId === null
+      ? { parentId: debug.parentId }
+      : {}),
     tag: definition.tag!,
     ...(definition.tag ? { displayName: definition.tag } : {}),
     shadowMode:
@@ -74,9 +81,15 @@ const inputFor = (host: HTMLElement): DevtoolsComponentInput => {
     props: () =>
       debug?.props ??
       Object.fromEntries(
-        propNames.map((name) => [name, host[name as keyof HTMLElement]]),
+        propNames.map((name) => [
+          name,
+          hostRef.deref()?.[name as keyof HTMLElement],
+        ]),
       ),
-    attrs: () => attributes(host),
+    attrs: () => {
+      const current = hostRef.deref();
+      return current ? attributes(current) : {};
+    },
     setup: () => debug?.setup ?? {},
     exposed: () => debug?.exposed ?? {},
   };

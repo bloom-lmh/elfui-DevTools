@@ -117,4 +117,97 @@ describe("ElfUIDevtoolsBridge", () => {
       "events",
     ]);
   });
+
+  it("builds a runtime tree when children mount before their parent", () => {
+    const bridge = createDevtoolsBridge();
+    const parent = document.createElement("elf-runtime-parent");
+    const child = document.createElement("elf-runtime-child");
+
+    bridge.emitRuntimeEvent({
+      type: "component:mount",
+      component: {
+        id: "elfui-component:2",
+        parentId: "elfui-component:1",
+        appId: "elfui-app:1",
+        host: child,
+        tag: "elf-runtime-child",
+      },
+    });
+    bridge.emitRuntimeEvent({
+      type: "component:mount",
+      component: {
+        id: "elfui-component:1",
+        parentId: null,
+        appId: "elfui-app:1",
+        host: parent,
+        tag: "elf-runtime-parent",
+      },
+    });
+
+    expect(bridge.getSnapshot()).toMatchObject({
+      apps: [{ id: "elfui-app:1", rootIds: ["elfui-component:1"] }],
+      components: [
+        {
+          id: "elfui-component:2",
+          parentId: "elfui-component:1",
+        },
+        {
+          id: "elfui-component:1",
+          children: ["elfui-component:2"],
+        },
+      ],
+    });
+
+    bridge.emitRuntimeEvent({ type: "component:unmount", host: parent });
+    expect(bridge.getSnapshot().components).toEqual([]);
+  });
+
+  it("keeps multiple runtime apps isolated during unmount", () => {
+    const bridge = createDevtoolsBridge();
+    const first = document.createElement("elf-first-app");
+    const second = document.createElement("elf-second-app");
+    bridge.emitRuntimeEvent({
+      type: "app:mount",
+      app: { id: "elfui-app:first", label: "first", root: first },
+    });
+    bridge.emitRuntimeEvent({
+      type: "app:mount",
+      app: { id: "elfui-app:second", label: "second", root: second },
+    });
+    bridge.emitRuntimeEvent({
+      type: "component:mount",
+      component: {
+        id: "elfui-component:first",
+        parentId: null,
+        appId: "elfui-app:first",
+        host: first,
+        tag: "elf-first-app",
+      },
+    });
+    bridge.emitRuntimeEvent({
+      type: "component:mount",
+      component: {
+        id: "elfui-component:second",
+        parentId: null,
+        appId: "elfui-app:second",
+        host: second,
+        tag: "elf-second-app",
+      },
+    });
+
+    bridge.emitRuntimeEvent({
+      type: "app:unmount",
+      appId: "elfui-app:first",
+    });
+
+    expect(bridge.getSnapshot()).toMatchObject({
+      apps: [
+        {
+          id: "elfui-app:second",
+          rootIds: ["elfui-component:second"],
+        },
+      ],
+      components: [{ id: "elfui-component:second" }],
+    });
+  });
 });
