@@ -43,6 +43,24 @@ export type ElfUIRuntimeEvent =
       args: unknown[];
     };
 
+export type ElfUIReactivityEvent =
+  | {
+      type: "reactivity:trigger";
+      id: string;
+      parentTriggerId: string | null;
+      targetId: string;
+      targetName?: string;
+      key: string;
+      effects: Array<{ effectId: string; componentId: string | null }>;
+    }
+  | {
+      type: "reactivity:effect";
+      triggerId: string;
+      effectId: string;
+      componentId: string | null;
+      duration: number;
+    };
+
 export interface DevtoolsBridgeOptions {
   now?: () => number;
   maxTimelineEvents?: number;
@@ -262,6 +280,34 @@ export class ElfUIDevtoolsBridge {
         break;
       }
     }
+  }
+
+  public emitReactivityEvent(event: ElfUIReactivityEvent): void {
+    const componentIds =
+      event.type === "reactivity:trigger"
+        ? event.effects.flatMap((effect) =>
+            effect.componentId ? [effect.componentId] : [],
+          )
+        : event.componentId
+          ? [event.componentId]
+          : [];
+    const component = componentIds
+      .map((id) => this.components.get(id))
+      .find((record) => record !== undefined);
+    if (!component) return;
+
+    const summary =
+      event.type === "reactivity:trigger"
+        ? `${event.targetName ?? event.targetId}.${event.key} triggered ${event.effects.length} effect${event.effects.length === 1 ? "" : "s"}`
+        : `${event.effectId} ran in ${event.duration.toFixed(2)}ms`;
+    this.emit({
+      appId: component.appId,
+      componentId: component.id,
+      layer: "reactivity",
+      type: event.type === "reactivity:trigger" ? "trigger" : "effect",
+      summary,
+      data: serialize(event),
+    });
   }
 
   public getSnapshot(): DevtoolsSnapshot {

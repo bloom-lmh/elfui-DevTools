@@ -210,4 +210,51 @@ describe("ElfUIDevtoolsBridge", () => {
       components: [{ id: "elfui-component:second" }],
     });
   });
+
+  it("adds state trigger and effect causality to the reactivity timeline", () => {
+    const bridge = createDevtoolsBridge();
+    const host = document.createElement("elf-reactivity-counter");
+    bridge.registerComponent({
+      id: "elfui-component:counter",
+      appId: "elfui-app:counter",
+      parentId: null,
+      host,
+      tag: "elf-reactivity-counter",
+    });
+
+    bridge.emitReactivityEvent({
+      type: "reactivity:trigger",
+      id: "elfui-trigger:1",
+      parentTriggerId: null,
+      targetId: "elfui-target:1",
+      targetName: "count",
+      key: "value",
+      effects: [
+        {
+          effectId: "elfui-effect:1",
+          componentId: "elfui-component:counter",
+        },
+      ],
+    });
+    bridge.emitReactivityEvent({
+      type: "reactivity:effect",
+      triggerId: "elfui-trigger:1",
+      effectId: "elfui-effect:1",
+      componentId: "elfui-component:counter",
+      duration: 1.25,
+    });
+
+    expect(bridge.getTimeline().slice(-2)).toMatchObject([
+      {
+        layer: "reactivity",
+        type: "trigger",
+        summary: "count.value triggered 1 effect",
+      },
+      {
+        layer: "reactivity",
+        type: "effect",
+        summary: "elfui-effect:1 ran in 1.25ms",
+      },
+    ]);
+  });
 });
