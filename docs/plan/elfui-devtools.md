@@ -17,17 +17,17 @@
 - [x] bridge 支持子组件先于父组件注册、多 app 隔离、递归卸载，并用 WeakRef 保存 host。
 - [x] reactivity 为 trigger/effect 分配稳定因果 ID，关联 state 调试名、key、effect、component ID 与执行耗时。
 - [x] Timeline 已接入 Reactivity layer；不采集状态值，DevTools 未连接时不生成事件 payload。
-- [x] compiler/runtime 已为常用模板绑定生成 binding 名称与行列 metadata，Timeline 可显示 state → binding → component/source 链路。
+- [x] compiler/runtime 已为插值、属性、`v-model`、`v-show`、`v-if`、`v-for`、`v-memo` 生成具名 binding 与行列 metadata，Timeline 可显示 state → binding → component/source 链路。
 - [x] Timeline 已支持暂停/恢复、清空、16ms 同类事件聚合、窗口限流以及 dropped/aggregated 计数。
 - [x] shared/runtime/client 已建立版本化 RPC：requestId 请求响应、能力握手、错误码、in-page transport；面板数据读取和 Timeline 控制已走 RPC。
 - [x] DevTools bridge 优先消费 runtime 事件；保留 DOM 扫描作为晚加载兼容路径。
 - [x] 页面底部居中双按钮、默认隐藏面板、Inspector 选中后自动打开面板。
 - [x] DevTools UI 使用 Shadow DOM 隔离；补充 bridge、adapter、panel 和 runtime 集成测试。
 - [x] `elfui-docs` 本地开发配置完成 Vite 插件接入，并通过真实浏览器验证双入口和面板开关。
-- [ ] Phase 0 剩余：Dynamic/Suspense fixture、浏览器 GC 验证、v-model/控制流及文件级 source mapping。
+- [ ] Phase 0 剩余：Dynamic/Suspense fixture、浏览器 GC 验证、稳定文件 ID/source map。
 - [ ] Phase 1 剩余：停靠/缩放/全屏、导航与 app selector、主题和布局持久化、完整键盘/ARIA、视觉 E2E。
 
-下一步严格按顺序推进：先补齐 v-model/控制流 source mapping，再完成 Dynamic/Suspense fixture 与浏览器 GC 验证，之后完善面板外壳；跨宿主事件 transport 留在平台阶段，在这些验收完成前不进入 Assets、Graph、浏览器扩展或 standalone。
+下一步严格按顺序推进：先补齐稳定文件 ID/source map，再完成 Dynamic/Suspense fixture 与浏览器 GC 验证，之后完善面板外壳；跨宿主事件 transport 留在平台阶段，在这些验收完成前不进入 Assets、Graph、浏览器扩展或 standalone。
 
 ## 1. 目标与边界
 
@@ -96,7 +96,7 @@ Vue DevTools 的仓库也按 client、core、devtools-kit、devtools-api、overl
 - **应用模型**：已接入 `createApp()` 的稳定 ID 与 mount/unmount；晚加载扫描仍会为未知顶层 host 创建兼容 app，UI 也没有 app selector。
 - **状态检查**：已读取真实 `ComponentInstance` 的 setup state 和 exposed；provide/inject、refs、computed、编辑能力和响应式节点仍未实现。
 - **更新记录**：已关联命名 state、binding/effect、component、模板行列与耗时，并支持暂停、清空、16ms 聚合和窗口限流；尚未处理异步多次 trigger 的完整因果合并语义。
-- **源码定位**：常用 interpolation、v-bind、v-on object、v-text、v-html 已生成 binding 行列；仍缺 v-model/控制流、稳定文件 ID/source map 和点击打开编辑器。
+- **源码定位**：interpolation、v-bind、v-on object、v-text、v-html、v-model 与主要控制流已生成具名 binding 行列；仍缺稳定文件 ID/source map 和点击打开编辑器。
 - **协议与宿主**：面板已通过 in-page RPC 获取快照、详情和 Timeline，并完成能力协商；runtime instrumentation 与 Inspector 仍使用页面侧直连，跨宿主通知 transport、取消和超时尚未实现。
 - **UI**：已有 Vue 风格双按钮启动器、默认隐藏的 Shadow DOM 面板和关闭行为；仍缺停靠/缩放、导航、完整键盘操作、主题和布局持久化。
 
