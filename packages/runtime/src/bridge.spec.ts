@@ -220,7 +220,7 @@ describe("ElfUIDevtoolsBridge", () => {
       parentId: null,
       host,
       tag: "elf-reactivity-counter",
-      source: { file: "/src/Counter.elf", line: 1, column: 1 },
+      source: { file: "/src/Counter.elf", line: 10, column: 5 },
     });
 
     bridge.emitReactivityEvent({
@@ -259,12 +259,13 @@ describe("ElfUIDevtoolsBridge", () => {
       {
         layer: "reactivity",
         type: "trigger",
-        summary: "count.value → text triggered 1 effect @ /src/Counter.elf:4:8",
+        summary:
+          "count.value → text triggered 1 effect @ /src/Counter.elf:13:8",
       },
       {
         layer: "reactivity",
         type: "effect",
-        summary: "text ran in 1.25ms @ /src/Counter.elf:4:8",
+        summary: "text ran in 1.25ms @ /src/Counter.elf:13:8",
       },
     ]);
   });

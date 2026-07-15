@@ -118,6 +118,7 @@ export class ComponentInspector {
 
 export { DevtoolsPanel } from "./panel";
 export { installElfUIDevtools } from "./bootstrap";
+export { openSourceInEditor, type OpenSourceInEditor } from "./source";
 export {
   DevtoolsRpcClient,
   DevtoolsRpcClientError,

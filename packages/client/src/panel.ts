@@ -9,6 +9,7 @@ import type { ElfUIDevtoolsBridge } from "@elfui/devtools-runtime";
 
 import { ComponentInspector } from "./index";
 import type { DevtoolsRpcClient } from "./rpc-client";
+import { openSourceInEditor, type OpenSourceInEditor } from "./source";
 
 const valueText = (value: SerializedValue): string => {
   if (value.kind === "primitive") return JSON.stringify(value.value);
@@ -97,6 +98,8 @@ const styles = `
   .section-title { margin: 0 0 5px; color: #94a3b8; font-weight: 600; text-transform: uppercase; }
   .timeline-actions { display: flex; gap: 4px; margin-bottom: 5px; }
   .timeline-actions button { border: 1px solid #475569; border-radius: 4px; background: #1e293b; color: #cbd5e1; cursor: pointer; }
+  .source-action { margin: 8px 0 0; border: 1px solid #0ea5e9; border-radius: 5px; padding: 4px 8px; background: #082f49; color: #bae6fd; cursor: pointer; }
+  .source-action:disabled { cursor: wait; opacity: .65; }
   .component {
     display: block;
     width: 100%;
@@ -136,6 +139,7 @@ export class DevtoolsPanel {
     private readonly bridge: ElfUIDevtoolsBridge,
     private readonly document: Document = window.document,
     private readonly rpc?: DevtoolsRpcClient,
+    private readonly openSource: OpenSourceInEditor = openSourceInEditor,
   ) {
     this.host = document.createElement("div");
     this.host.dataset.elfuiDevtools = "host";
@@ -361,5 +365,25 @@ export class DevtoolsPanel {
       : "unavailable";
     detailNode.textContent = `${detail.displayName}\nsource: ${source}\nprops: ${valueText(detail.props)}\nattrs: ${valueText(detail.attrs)}\nsetup: ${valueText(detail.setup)}\nexposed: ${valueText(detail.exposed)}\nupdates: ${detail.lifecycle.updateCount}`;
     this.content.append(detailNode);
+    if (detail.source) {
+      const sourceLocation = detail.source;
+      const openButton = this.document.createElement("button");
+      openButton.className = "source-action";
+      openButton.type = "button";
+      openButton.textContent = "Open in editor";
+      openButton.setAttribute("aria-label", "Open component source in editor");
+      openButton.onclick = () => {
+        openButton.disabled = true;
+        void this.openSource(sourceLocation)
+          .catch((error: unknown) => {
+            openButton.title =
+              error instanceof Error ? error.message : String(error);
+          })
+          .finally(() => {
+            openButton.disabled = false;
+          });
+      };
+      this.content.append(openButton);
+    }
   }
 }

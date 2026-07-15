@@ -24,10 +24,12 @@
 - [x] 页面底部居中双按钮、默认隐藏面板、Inspector 选中后自动打开面板。
 - [x] DevTools UI 使用 Shadow DOM 隔离；补充 bridge、adapter、panel 和 runtime 集成测试。
 - [x] `elfui-docs` 本地开发配置完成 Vite 插件接入，并通过真实浏览器验证双入口和面板开关。
-- [ ] Phase 0 剩余：Dynamic/Suspense fixture、浏览器 GC 验证、稳定文件 ID/source map。
+- [x] macro compiler 自动为每个组件注入开发态 `__elfSource` 文件、起止行列；binding 相对坐标已映射为真实文件坐标。
+- [x] Vite 已提供受项目根目录约束的 open-in-editor endpoint；组件详情可点击打开准确文件、行、列，并拒绝目录穿越。
+- [ ] Phase 0 剩余：Dynamic/Suspense fixture、浏览器 GC 验证、跨平台稳定文件 ID/source map remapping。
 - [ ] Phase 1 剩余：停靠/缩放/全屏、导航与 app selector、主题和布局持久化、完整键盘/ARIA、视觉 E2E。
 
-下一步严格按顺序推进：先补齐稳定文件 ID/source map，再完成 Dynamic/Suspense fixture 与浏览器 GC 验证，之后完善面板外壳；跨宿主事件 transport 留在平台阶段，在这些验收完成前不进入 Assets、Graph、浏览器扩展或 standalone。
+下一步严格按顺序推进：先完成 Dynamic/Suspense fixture 与浏览器 GC 验证，再补跨平台稳定文件 ID/source map remapping，之后完善面板外壳；跨宿主事件 transport 留在平台阶段，在这些验收完成前不进入 Assets、Graph、浏览器扩展或 standalone。
 
 ## 1. 目标与边界
 
@@ -76,19 +78,19 @@ Vue DevTools 的仓库也按 client、core、devtools-kit、devtools-api、overl
 
 ### 3.1 已实现
 
-| 能力            | 当前实现                                                                              | 证据/限制                                                  |
-| --------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| 基础协议        | `protocolVersion = 1`；带 requestId 的 RPC、能力握手、结构化错误及 in-page transport  | 缺通知/订阅、取消/超时和跨宿主 transport                   |
-| 安全序列化      | 支持循环引用、深度/条目限制及特殊类型摘要                                             | 缺少惰性展开、大对象分页和可编辑路径                       |
-| 组件登记        | runtime 主动发送 app/component 生命周期事件                                           | 晚加载兼容仍使用 DOM 扫描与 MutationObserver               |
-| 基础组件树      | 稳定组件/父 ID；跨 Shadow DOM、Teleport、KeepAlive 保持逻辑树                         | Dynamic、Suspense 与大规模树仍需专项 fixture               |
-| 基础组件详情    | 真实读取 props、attrs、setup、exposed 和 source metadata                              | provides/injects、refs、computed 与响应式依赖尚未接入      |
-| 基础 Inspector  | 悬停高亮、点击选中、Escape 退出                                                       | 没有组件标签、滚动定位、源码跳转、快捷键和双向同步完善     |
-| 基础 Timeline   | 自动采集 state → binding/effect → component/source 与耗时；支持暂停、清空、聚合和限流 | 缺 layer/组件过滤、瀑布/缩放、异步因果合并和完整性能指标   |
-| Vite 开发注入   | `apply: "serve"`，通过虚拟模块加载客户端                                              | 只有 HTML 注入；缺少 `appendTo`、CSP、SSR/无 HTML 入口策略 |
-| 全局 hook       | runtime 事件保留开发态直连；bridge 同时暴露版本化 RPC endpoint                        | DOM Inspector 仍需页面侧引用；缺插件协议和跨宿主事件桥     |
-| Source 字段展示 | 可读取构造器上的 `__elfSource` 并显示                                                 | 编译器未系统生成 metadata，Vite 也没有 open-in-editor 服务 |
-| 最小测试        | DevTools 21 个测试，并有真实 ElfUI runtime/app/RPC 集成测试                           | 已手工浏览器验收；仍缺自动浏览器 E2E、性能和扩展测试       |
+| 能力           | 当前实现                                                                              | 证据/限制                                                |
+| -------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| 基础协议       | `protocolVersion = 1`；带 requestId 的 RPC、能力握手、结构化错误及 in-page transport  | 缺通知/订阅、取消/超时和跨宿主 transport                 |
+| 安全序列化     | 支持循环引用、深度/条目限制及特殊类型摘要                                             | 缺少惰性展开、大对象分页和可编辑路径                     |
+| 组件登记       | runtime 主动发送 app/component 生命周期事件                                           | 晚加载兼容仍使用 DOM 扫描与 MutationObserver             |
+| 基础组件树     | 稳定组件/父 ID；跨 Shadow DOM、Teleport、KeepAlive 保持逻辑树                         | Dynamic、Suspense 与大规模树仍需专项 fixture             |
+| 基础组件详情   | 真实读取 props、attrs、setup、exposed 和 source metadata                              | provides/injects、refs、computed 与响应式依赖尚未接入    |
+| 基础 Inspector | 悬停高亮、点击选中、Escape 退出、组件详情打开源码                                     | 没有组件标签、滚动定位、快捷键和双向同步完善             |
+| 基础 Timeline  | 自动采集 state → binding/effect → component/source 与耗时；支持暂停、清空、聚合和限流 | 缺 layer/组件过滤、瀑布/缩放、异步因果合并和完整性能指标 |
+| Vite 开发注入  | `apply: "serve"`，通过虚拟模块加载客户端；提供根目录受限的 open-in-editor middleware  | 缺少 `appendTo`、CSP、SSR/无 HTML 入口策略               |
+| 全局 hook      | runtime 事件保留开发态直连；bridge 同时暴露版本化 RPC endpoint                        | DOM Inspector 仍需页面侧引用；缺插件协议和跨宿主事件桥   |
+| Source 定位    | compiler 自动生成组件起止位置，binding 坐标映射到真实文件；面板可打开编辑器           | 缺跨平台稳定文件 ID、source map remapping 与浏览器 E2E   |
+| 最小测试       | DevTools 25 个测试，并有真实 ElfUI runtime/app/RPC 集成测试                           | 已手工浏览器验收；仍缺自动浏览器 E2E、性能和扩展测试     |
 
 ### 3.2 部分实现但不可视为完成
 
@@ -96,7 +98,7 @@ Vue DevTools 的仓库也按 client、core、devtools-kit、devtools-api、overl
 - **应用模型**：已接入 `createApp()` 的稳定 ID 与 mount/unmount；晚加载扫描仍会为未知顶层 host 创建兼容 app，UI 也没有 app selector。
 - **状态检查**：已读取真实 `ComponentInstance` 的 setup state 和 exposed；provide/inject、refs、computed、编辑能力和响应式节点仍未实现。
 - **更新记录**：已关联命名 state、binding/effect、component、模板行列与耗时，并支持暂停、清空、16ms 聚合和窗口限流；尚未处理异步多次 trigger 的完整因果合并语义。
-- **源码定位**：interpolation、v-bind、v-on object、v-text、v-html、v-model 与主要控制流已生成具名 binding 行列；仍缺稳定文件 ID/source map 和点击打开编辑器。
+- **源码定位**：interpolation、v-bind、v-on object、v-text、v-html、v-model 与主要控制流已生成具名 binding 行列；macro component 自动注入组件文件范围，详情按钮通过 Vite 安全打开编辑器；仍缺跨平台稳定文件 ID 和 source map remapping。
 - **协议与宿主**：面板已通过 in-page RPC 获取快照、详情和 Timeline，并完成能力协商；runtime instrumentation 与 Inspector 仍使用页面侧直连，跨宿主通知 transport、取消和超时尚未实现。
 - **UI**：已有 Vue 风格双按钮启动器、默认隐藏的 Shadow DOM 面板和关闭行为；仍缺停靠/缩放、导航、完整键盘操作、主题和布局持久化。
 
@@ -116,7 +118,6 @@ Vue DevTools 的仓库也按 client、core、devtools-kit、devtools-api、overl
 | Graph                                      | 未实现                     | P3     |
 | Settings                                   | 未实现                     | P1     |
 | Vite Transform Inspect                     | 未实现                     | P3     |
-| Open in editor                             | 未实现                     | P0     |
 | Separate Window                            | 未实现                     | P2     |
 | Command Palette                            | 未实现                     | P2     |
 | Multiple Apps                              | runtime 已识别，缺 UI 切换 | P1     |

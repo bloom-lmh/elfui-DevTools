@@ -1,4 +1,6 @@
 export const DEVTOOLS_PROTOCOL_VERSION = 1 as const;
+export const DEVTOOLS_OPEN_IN_EDITOR_ENDPOINT =
+  "/__elfui_devtools/open-in-editor" as const;
 
 export type PrimitiveValue = string | number | boolean | null;
 

@@ -5,7 +5,8 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "dependencies": {
-    "@elfui/devtools-client": "workspace:*"
+    "@elfui/devtools-client": "workspace:*",
+    "launch-editor": "^2.14.1"
   },
   "peerDependencies": {
     "vite": "^7.0.0"

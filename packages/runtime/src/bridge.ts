@@ -339,9 +339,20 @@ export class ElfUIDevtoolsBridge implements DevtoolsRpcHandler {
         ? event.effects.find((effect) => effect.debug)?.debug
         : event.debug;
     const binding = firstDebug?.name ? ` → ${firstDebug.name}` : "";
-    const location = firstDebug?.source
-      ? ` @ ${component.input.source?.file ? `${component.input.source.file}:` : ""}${firstDebug.source.line}:${firstDebug.source.column}`
-      : "";
+    const componentSource = component.input.source;
+    const bindingSource = firstDebug?.source;
+    const resolvedLine = bindingSource
+      ? (componentSource?.line ?? 1) + bindingSource.line - 1
+      : null;
+    const resolvedColumn = bindingSource
+      ? bindingSource.line === 1
+        ? (componentSource?.column ?? 1) + bindingSource.column - 1
+        : bindingSource.column
+      : null;
+    const location =
+      resolvedLine !== null && resolvedColumn !== null
+        ? ` @ ${componentSource?.file ? `${componentSource.file}:` : ""}${resolvedLine}:${resolvedColumn}`
+        : "";
     const summary =
       event.type === "reactivity:trigger"
         ? `${event.targetName ?? event.targetId}.${event.key}${binding} triggered ${event.effects.length} effect${event.effects.length === 1 ? "" : "s"}${location}`
